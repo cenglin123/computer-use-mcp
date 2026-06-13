@@ -13,7 +13,7 @@ from typing import Any
 import pyautogui
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import CallToolRequestParams, TextContent, Tool
+from mcp.types import TextContent, Tool
 
 from computer_use.config import load_config
 from computer_use.core import (
@@ -299,9 +299,9 @@ async def serve() -> None:
         return TOOLS
 
     @server.call_tool()
-    async def call_tool(params: CallToolRequestParams) -> list[TextContent]:
+    async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         try:
-            result = _call_tool(params.name, params.arguments or {})
+            result = _call_tool(name, arguments or {})
             return [TextContent(type="text", text=result)]
         except Exception as exc:
             logging.exception("tool error")
