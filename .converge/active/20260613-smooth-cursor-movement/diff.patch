@@ -1,0 +1,255 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 458ec0e..60ff09b 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -15,3 +15,8 @@
+ - 写入前不要读全文，用 `python scripts/changelog.py titles/show/add/recent` 操作。
+ - 当前工作状态写在 docs/CURRENT.md；CHANGELOG 只记录历史变更。
+ -->
++
++### click/move_to 支持平滑移动
++
++#### 变更内容
++- 为 click 和 move_to 增加 duration 参数（默认 0.2 秒），通过 pyautogui 的 duration 实现平滑移动，避免光标瞬移导致悬停菜单/下拉框关闭。MCP 工具 Schema、本地 CLI 和 core API 均支持自定义 duration。新增对应单元测试。
+diff --git a/computer_use/cli.py b/computer_use/cli.py
+index 2d5df15..a039e48 100644
+--- a/computer_use/cli.py
++++ b/computer_use/cli.py
+@@ -53,10 +53,22 @@ def main(argv: list[str] | None = None) -> int:
+     p_click = sub.add_parser("click", help="Click at physical virtual screen coordinates")
+     p_click.add_argument("x", type=int)
+     p_click.add_argument("y", type=int)
++    p_click.add_argument(
++        "--duration",
++        type=float,
++        default=0.2,
++        help="Seconds to spend moving the cursor before clicking (default: 0.2)",
++    )
+ 
+     p_move = sub.add_parser("move", help="Move mouse to physical virtual screen coordinates")
+     p_move.add_argument("x", type=int)
+     p_move.add_argument("y", type=int)
++    p_move.add_argument(
++        "--duration",
++        type=float,
++        default=0.2,
++        help="Seconds to spend moving the cursor (default: 0.2)",
++    )
+ 
+     p_scroll = sub.add_parser("scroll", help="Scroll at current or given position")
+     p_scroll.add_argument("amount", type=int)
+@@ -88,13 +100,13 @@ def main(argv: list[str] | None = None) -> int:
+             validate_coordinate(args.x, args.y, size.width, size.height, monitors=cs.monitors)
+             info = inspect_point(args.x, args.y)
+             check_target_window(info.process_name, info.class_name, info.control_type)
+-            click(args.x, args.y)
++            click(args.x, args.y, duration=args.duration)
+         elif args.cmd == "move":
+             size = cs.get_screen_size()
+             validate_coordinate(args.x, args.y, size.width, size.height, monitors=cs.monitors)
+             info = inspect_point(args.x, args.y)
+             check_target_window(info.process_name, info.class_name, info.control_type)
+-            move_to(args.x, args.y)
++            move_to(args.x, args.y, duration=args.duration)
+         elif args.cmd == "scroll":
+             if args.x is not None and args.y is not None:
+                 size = cs.get_screen_size()
+diff --git a/computer_use/core.py b/computer_use/core.py
+index 1265b46..a1d8a04 100644
+--- a/computer_use/core.py
++++ b/computer_use/core.py
+@@ -255,18 +255,28 @@ def create_redacted_image(width: int, height: int) -> str:
+     return base64.b64encode(buffer.getvalue()).decode("utf-8")
+ 
+ 
+-def click(x: int, y: int) -> None:
+-    """Click at physical virtual screen coordinates (x, y)."""
++def click(x: int, y: int, duration: float = 0.2) -> None:
++    """Click at physical virtual screen coordinates (x, y).
++
++    Args:
++        duration: Seconds to spend moving the cursor to the target before
++            clicking. A small positive value keeps hover-activated menus open.
++    """
+     cs = get_coordinate_system()
+     phys_x, phys_y = cs.to_physical(x, y)
+-    pyautogui.click(phys_x, phys_y)
++    pyautogui.click(phys_x, phys_y, duration=duration)
+ 
+ 
+-def move_to(x: int, y: int) -> None:
+-    """Move the cursor to physical virtual screen coordinates (x, y)."""
++def move_to(x: int, y: int, duration: float = 0.2) -> None:
++    """Move the cursor to physical virtual screen coordinates (x, y).
++
++    Args:
++        duration: Seconds to spend moving the cursor. A small positive value
++            keeps hover-activated menus open.
++    """
+     cs = get_coordinate_system()
+     phys_x, phys_y = cs.to_physical(x, y)
+-    pyautogui.moveTo(phys_x, phys_y)
++    pyautogui.moveTo(phys_x, phys_y, duration=duration)
+ 
+ 
+ def scroll(amount: int, x: int | None = None, y: int | None = None) -> None:
+diff --git a/computer_use/mcp_server.py b/computer_use/mcp_server.py
+index f1b3fda..2aa8a4b 100644
+--- a/computer_use/mcp_server.py
++++ b/computer_use/mcp_server.py
+@@ -80,24 +80,32 @@ TOOLS: list[Tool] = [
+     ),
+     Tool(
+         name="click",
+-        description="Click at the given physical virtual screen coordinates (x, y).",
++        description="Click at the given physical virtual screen coordinates (x, y). The cursor moves smoothly over a short duration to avoid closing hover-activated menus.",
+         inputSchema={
+             "type": "object",
+             "properties": {
+                 "x": {"type": "integer", "description": "Physical virtual screen x coordinate"},
+                 "y": {"type": "integer", "description": "Physical virtual screen y coordinate"},
++                "duration": {
++                    "type": "number",
++                    "description": "Seconds to spend moving the cursor before clicking. Default 0.2. Increase if menus close prematurely.",
++                },
+             },
+             "required": ["x", "y"],
+         },
+     ),
+     Tool(
+         name="move_to",
+-        description="Move the mouse cursor to the given physical virtual screen coordinates.",
++        description="Move the mouse cursor to the given physical virtual screen coordinates. The cursor moves smoothly over a short duration to avoid closing hover-activated menus.",
+         inputSchema={
+             "type": "object",
+             "properties": {
+                 "x": {"type": "integer"},
+                 "y": {"type": "integer"},
++                "duration": {
++                    "type": "number",
++                    "description": "Seconds to spend moving the cursor. Default 0.2. Increase if menus close prematurely.",
++                },
+             },
+             "required": ["x", "y"],
+         },
+@@ -201,21 +209,23 @@ def _dispatch_tool(name: str, args: dict, cs: CoordinateSystem) -> str:
+ 
+     if name == "click":
+         x, y = args["x"], args["y"]
++        duration = args.get("duration", 0.2)
+         size = cs.get_screen_size()
+         validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
+         info = inspect_point(x, y)
+         check_target_window(info.process_name, info.class_name, info.control_type)
+-        click(x, y)
+-        return json.dumps({"clicked": True, "x": x, "y": y})
++        click(x, y, duration=duration)
++        return json.dumps({"clicked": True, "x": x, "y": y, "duration": duration})
+ 
+     if name == "move_to":
+         x, y = args["x"], args["y"]
++        duration = args.get("duration", 0.2)
+         size = cs.get_screen_size()
+         validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
+         info = inspect_point(x, y)
+         check_target_window(info.process_name, info.class_name, info.control_type)
+-        move_to(x, y)
+-        return json.dumps({"moved": True, "x": x, "y": y})
++        move_to(x, y, duration=duration)
++        return json.dumps({"moved": True, "x": x, "y": y, "duration": duration})
+ 
+     if name == "scroll":
+         amount = args["amount"]
+diff --git a/docs/api.md b/docs/api.md
+index f3db21a..183e2e0 100644
+--- a/docs/api.md
++++ b/docs/api.md
+@@ -17,7 +17,8 @@
+ 
+ ### 输入类
+ 
+-- `click` / `move_to` / `scroll`：鼠标操作。坐标必须落在真实显示器内。
++- `click` / `move_to`：鼠标操作。坐标必须落在真实显示器内。光标会平滑移动到目标位置，默认耗时 0.2 秒；可通过 `duration` 参数调整，避免快速移动导致悬停菜单关闭。
++- `scroll`：滚动鼠标滚轮。可选指定坐标。
+ - `type_text`：模拟键盘输入文本。当前光标位置决定输入目标。
+ - `key_combo`：模拟组合键（如 `ctrl`, `c`）。
+ 
+diff --git a/tests/test_core.py b/tests/test_core.py
+index aff6a46..295d56a 100644
+--- a/tests/test_core.py
++++ b/tests/test_core.py
+@@ -150,6 +150,44 @@ def test_create_redacted_image() -> None:
+     assert img.size == (100, 200)
+ 
+ 
++def _fake_coordinate_system() -> core.CoordinateSystem:
++    cs = core.CoordinateSystem.__new__(core.CoordinateSystem)
++    cs.to_physical = lambda x, y: (x, y)  # type: ignore[method-assign]
++    return cs
++
++
++def test_click_uses_default_duration(monkeypatch) -> None:
++    calls = []
++    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
++    monkeypatch.setattr(core.pyautogui, "click", lambda x, y, duration: calls.append((x, y, duration)))
++    core.click(100, 200)
++    assert calls == [(100, 200, 0.2)]
++
++
++def test_click_uses_custom_duration(monkeypatch) -> None:
++    calls = []
++    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
++    monkeypatch.setattr(core.pyautogui, "click", lambda x, y, duration: calls.append((x, y, duration)))
++    core.click(100, 200, duration=0.5)
++    assert calls == [(100, 200, 0.5)]
++
++
++def test_move_to_uses_default_duration(monkeypatch) -> None:
++    calls = []
++    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
++    monkeypatch.setattr(core.pyautogui, "moveTo", lambda x, y, duration: calls.append((x, y, duration)))
++    core.move_to(100, 200)
++    assert calls == [(100, 200, 0.2)]
++
++
++def test_move_to_uses_custom_duration(monkeypatch) -> None:
++    calls = []
++    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
++    monkeypatch.setattr(core.pyautogui, "moveTo", lambda x, y, duration: calls.append((x, y, duration)))
++    core.move_to(100, 200, duration=0.5)
++    assert calls == [(100, 200, 0.5)]
++
++
+ def test_mixed_dpi_fail_fast(monkeypatch) -> None:
+     """CoordinateSystem should raise when monitors have mismatched scale ratios."""
+     cs = core.CoordinateSystem.__new__(core.CoordinateSystem)
+diff --git a/tests/test_mcp_server.py b/tests/test_mcp_server.py
+index 90ace96..766909f 100644
+--- a/tests/test_mcp_server.py
++++ b/tests/test_mcp_server.py
+@@ -93,3 +93,25 @@ def test_click_gap_region() -> None:
+     result = _call_tool("click", {"x": gap_x, "y": gap_y})
+     data = json.loads(result)
+     assert "error" in data or "gap" in result
++
++
++def test_click_accepts_duration(monkeypatch) -> None:
++    import computer_use.mcp_server as server
++
++    calls = []
++    monkeypatch.setattr(server, "click", lambda x, y, duration: calls.append((x, y, duration)))
++    result = _call_tool("click", {"x": 100, "y": 200, "duration": 0.5})
++    data = json.loads(result)
++    assert data["duration"] == 0.5
++    assert calls == [(100, 200, 0.5)]
++
++
++def test_move_to_accepts_duration(monkeypatch) -> None:
++    import computer_use.mcp_server as server
++
++    calls = []
++    monkeypatch.setattr(server, "move_to", lambda x, y, duration: calls.append((x, y, duration)))
++    result = _call_tool("move_to", {"x": 100, "y": 200, "duration": 0.8})
++    data = json.loads(result)
++    assert data["duration"] == 0.8
++    assert calls == [(100, 200, 0.8)]

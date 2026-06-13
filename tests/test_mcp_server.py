@@ -115,3 +115,25 @@ def test_move_to_accepts_duration(monkeypatch) -> None:
     data = json.loads(result)
     assert data["duration"] == 0.8
     assert calls == [(100, 200, 0.8)]
+
+
+def test_click_default_duration(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
+    calls = []
+    monkeypatch.setattr(server, "click", lambda x, y, duration: calls.append((x, y, duration)))
+    result = _call_tool("click", {"x": 100, "y": 200})
+    data = json.loads(result)
+    assert data["duration"] == 0.2
+    assert calls == [(100, 200, 0.2)]
+
+
+def test_move_to_default_duration(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
+    calls = []
+    monkeypatch.setattr(server, "move_to", lambda x, y, duration: calls.append((x, y, duration)))
+    result = _call_tool("move_to", {"x": 100, "y": 200})
+    data = json.loads(result)
+    assert data["duration"] == 0.2
+    assert calls == [(100, 200, 0.2)]
