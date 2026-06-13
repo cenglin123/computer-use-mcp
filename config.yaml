@@ -1,0 +1,21 @@
+# Runtime configuration for the Computer Use MCP Server.
+# This is the server-side policy file; it does NOT register the server with
+# Kimi Code CLI. See README.md for the Kimi Code CLI registration snippet.
+
+log_dir: ~/.kimi-code/logs
+
+safety:
+  # List of additional process names to treat as sensitive.
+  sensitive_processes: []
+
+  # List of additional window class names to treat as sensitive.
+  sensitive_window_classes: []
+
+  # If true, screenshot tool will attempt to detect sensitive windows and
+  # warn/blank them. This is advisory in MVP; full protection requires user care.
+  screenshot_sensitive_window_check: true
+
+display:
+  # Default monitor for screenshot when no monitor argument is provided.
+  # 0 = entire virtual desktop (default). 1 = primary monitor, 2+ = secondary.
+  default_monitor: 0
