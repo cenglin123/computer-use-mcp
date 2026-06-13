@@ -5,7 +5,7 @@
 
 ## 当前任务
 
-初始化 agent-first 文档体系。
+无。
 
 ## 当前模式
 
@@ -13,11 +13,11 @@
 
 ## 当前负责人
 
-Kimi Code。
+无。
 
 ## 下一步
 
-完成 README.md 迁移、出生档案、CHANGELOG 初始化条目和 pre-commit hook 配置。
+等待新任务。
 
 ## 关联计划
 
