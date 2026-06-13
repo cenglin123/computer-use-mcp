@@ -25,6 +25,9 @@ except Exception:  # pragma: no cover
 # Suppress pyautogui failsafe moving too fast warnings in headless tests.
 pyautogui.FAILSAFE = True
 
+#: Default duration (seconds) for smooth cursor movement in mouse tools.
+DEFAULT_MOVE_DURATION: float = 0.2
+
 
 class ScreenInfo(NamedTuple):
     width: int
@@ -255,25 +258,50 @@ def create_redacted_image(width: int, height: int) -> str:
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
-def click(x: int, y: int, duration: float = 0.2) -> None:
+def validate_duration(duration: float) -> float:
+    """Validate that *duration* is a non-negative finite number.
+
+    Args:
+        duration: Desired movement duration in seconds.
+
+    Returns:
+        The validated duration.
+
+    Raises:
+        ValueError: If *duration* is negative, NaN, or not finite.
+    """
+    if duration != duration:  # NaN is the only value that does not equal itself.
+        raise ValueError(f"duration must be a real number, got NaN")
+    if duration < 0:
+        raise ValueError(f"duration must be non-negative, got {duration}")
+    if duration == float("inf"):
+        raise ValueError(f"duration must be finite, got {duration}")
+    return duration
+
+
+def click(x: int, y: int, duration: float = DEFAULT_MOVE_DURATION) -> None:
     """Click at physical virtual screen coordinates (x, y).
 
     Args:
         duration: Seconds to spend moving the cursor to the target before
-            clicking. A small positive value keeps hover-activated menus open.
+            clicking. Defaults to ``DEFAULT_MOVE_DURATION``. A small positive
+            value keeps hover-activated menus open.
     """
+    validate_duration(duration)
     cs = get_coordinate_system()
     phys_x, phys_y = cs.to_physical(x, y)
     pyautogui.click(phys_x, phys_y, duration=duration)
 
 
-def move_to(x: int, y: int, duration: float = 0.2) -> None:
+def move_to(x: int, y: int, duration: float = DEFAULT_MOVE_DURATION) -> None:
     """Move the cursor to physical virtual screen coordinates (x, y).
 
     Args:
-        duration: Seconds to spend moving the cursor. A small positive value
-            keeps hover-activated menus open.
+        duration: Seconds to spend moving the cursor. Defaults to
+            ``DEFAULT_MOVE_DURATION``. A small positive value keeps
+            hover-activated menus open.
     """
+    validate_duration(duration)
     cs = get_coordinate_system()
     phys_x, phys_y = cs.to_physical(x, y)
     pyautogui.moveTo(phys_x, phys_y, duration=duration)

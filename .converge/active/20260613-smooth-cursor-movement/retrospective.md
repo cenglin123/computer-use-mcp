@@ -52,9 +52,15 @@ R1=1 → R2=0 → blind=0
 
 基于设计审查 highlights，后续可考虑（非阻塞）：
 
-1. 在 `core.py` 或 `config.py` 中建立 `DEFAULT_MOVE_DURATION` 单一权威源，让 MCP/CLI 派生默认值。
-2. 为 `duration` 补充取值范围文档与可选校验（如 `duration >= 0`）。
-3. 若新增更多鼠标工具，考虑在 `mcp_server.py` / `cli.py` 中抽象公共的鼠标操作调度逻辑。
+1. 在 `core.py` 或 `config.py` 中建立 `DEFAULT_MOVE_DURATION` 单一权威源，让 MCP/CLI 派生默认值。 ✅ 已在 post-convergence revision 1 中实现。
+2. 为 `duration` 补充取值范围文档与可选校验（如 `duration >= 0`）。 ✅ 已在 post-convergence revision 1 中实现。
+3. 若新增更多鼠标工具，考虑在 `mcp_server.py` / `cli.py` 中抽象公共的鼠标操作调度逻辑。 ✅ 已在 post-convergence revision 1 中实现。
+4. 增加 infinity / NaN 的 core & MCP 测试覆盖，并补充 CLI 非法值回归测试。
+5. 将 `validate_duration` 调用集中到单一入口，避免 interface 与 core 双重校验。
+6. 将 `cli.py` 的 `_dispatch_mouse_subcommand` 提升为模块级函数。
+7. 将 `mcp_server.py` 的 `_run_mouse_tool` 的 `result_key` 改为显式参数。
+8. MCP Schema 中 `duration` 补充 `minimum: 0` 约束。
+9. 对齐 CLI 子命令 `move` 与 core/MCP 工具名 `move_to`。
 
 ## 9. Round 0 合同谈判评估
 
@@ -90,6 +96,21 @@ blind_recheck:
   findings_count: 0
   escalated_to_main_loop: false
 ```
+
+> ## 11. Post-Convergence Revision 1
+
+| 维度 | 评估 |
+|------|------|
+| 触发来源 | user_external_input |
+| 用户请求 | ultraverge 修复 design-review 的 3 个 highlights |
+| 修复内容 | 1) 抽取 `core.DEFAULT_MOVE_DURATION` 单一权威源；2) 新增 `core.validate_duration` 并三层调用；3) 抽象 `mcp_server._run_mouse_tool` 和 `cli._dispatch_mouse_subcommand`。 |
+| Executor | agent-27 |
+| 验证 | pytest 55 passed；audit pass；agent_links pass |
+| Ultraverge review | 3 个独立 reviewer 全部 verdict = 可执行 |
+| Blind recheck | agent-31 verdict = 可执行 |
+| 结束模式 | 终止-a（严格收敛） |
+| 新增阻断 | 0 |
+| 遗留 suggestion | 见 §8 第 4-9 项 |
 
 ## Rule Activity
 

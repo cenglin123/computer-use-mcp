@@ -20,5 +20,18 @@
 - Approach: 新增 `test_click_default_duration` 和 `test_move_to_default_duration`。
 - Diff: tests/test_mcp_server.py
 - R1 verdict: Accepted
-- R2 verdict: (pending)
+- R2 verdict: Accepted
+
+## Post-convergence revision 1 · user_external_input
+- source: user_external_input
+- user request: ultraverge 修复 design-review 的 3 个 highlights
+- Issues addressed:
+  1. 默认 duration 0.2 在 core/mcp_server/cli 中重复硬编码 → 抽取 `core.DEFAULT_MOVE_DURATION` 单一权威源。
+  2. duration 未定义取值边界 → 新增 `core.validate_duration`，拒绝负数/NaN/无穷；MCP 返回清晰 JSON 错误；文档补充说明。
+  3. click/move_to 调度逻辑重复 → 在 mcp_server.py 和 cli.py 中分别抽象公共 helper `_run_mouse_tool` / `_dispatch_mouse_subcommand`。
+- Issue 归因: design_review_findings
+- plan_amendment_required: false
+- Approach: 由 Executor 重构实现；新增边界测试与 MCP 错误测试。
+- Diff: computer_use/core.py, computer_use/mcp_server.py, computer_use/cli.py, docs/api.md, tests/test_core.py, tests/test_mcp_server.py
+- status: implemented, pending ultraverge review
 

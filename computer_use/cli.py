@@ -5,11 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable
 
 import pyautogui
 
 from computer_use.config import load_config
 from computer_use.core import (
+    DEFAULT_MOVE_DURATION,
     click,
     get_coordinate_system,
     get_monitors,
@@ -18,6 +20,7 @@ from computer_use.core import (
     screenshot,
     scroll,
     type_text,
+    validate_duration,
 )
 from computer_use.safety import (
     SafetyError,
@@ -56,8 +59,8 @@ def main(argv: list[str] | None = None) -> int:
     p_click.add_argument(
         "--duration",
         type=float,
-        default=0.2,
-        help="Seconds to spend moving the cursor before clicking (default: 0.2)",
+        default=DEFAULT_MOVE_DURATION,
+        help=f"Seconds to spend moving the cursor before clicking (default: {DEFAULT_MOVE_DURATION})",
     )
 
     p_move = sub.add_parser("move", help="Move mouse to physical virtual screen coordinates")
@@ -66,8 +69,8 @@ def main(argv: list[str] | None = None) -> int:
     p_move.add_argument(
         "--duration",
         type=float,
-        default=0.2,
-        help="Seconds to spend moving the cursor (default: 0.2)",
+        default=DEFAULT_MOVE_DURATION,
+        help=f"Seconds to spend moving the cursor (default: {DEFAULT_MOVE_DURATION})",
     )
 
     p_scroll = sub.add_parser("scroll", help="Scroll at current or given position")
@@ -84,6 +87,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     cs = get_coordinate_system()
 
+    def _dispatch_mouse_subcommand(
+        args: argparse.Namespace,
+        action: Callable[[int, int, float], None],
+        result_key: str,
+    ) -> None:
+        validate_duration(args.duration)
+        size = cs.get_screen_size()
+        validate_coordinate(args.x, args.y, size.width, size.height, monitors=cs.monitors)
+        info = inspect_point(args.x, args.y)
+        check_target_window(info.process_name, info.class_name, info.control_type)
+        action(args.x, args.y, args.duration)
+        print(json.dumps({result_key: True, "x": args.x, "y": args.y, "duration": args.duration}))
+
     try:
         if args.cmd == "screenshot":
             monitor = args.monitor
@@ -96,17 +112,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "monitors":
             print(json.dumps([m._asdict() for m in get_monitors()]))
         elif args.cmd == "click":
-            size = cs.get_screen_size()
-            validate_coordinate(args.x, args.y, size.width, size.height, monitors=cs.monitors)
-            info = inspect_point(args.x, args.y)
-            check_target_window(info.process_name, info.class_name, info.control_type)
-            click(args.x, args.y, duration=args.duration)
+            _dispatch_mouse_subcommand(args, click, "clicked")
         elif args.cmd == "move":
-            size = cs.get_screen_size()
-            validate_coordinate(args.x, args.y, size.width, size.height, monitors=cs.monitors)
-            info = inspect_point(args.x, args.y)
-            check_target_window(info.process_name, info.class_name, info.control_type)
-            move_to(args.x, args.y, duration=args.duration)
+            _dispatch_mouse_subcommand(args, move_to, "moved")
         elif args.cmd == "scroll":
             if args.x is not None and args.y is not None:
                 size = cs.get_screen_size()

@@ -6,7 +6,9 @@ import json
 import logging
 import logging.handlers
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pyautogui
 from mcp.server import Server
@@ -15,6 +17,7 @@ from mcp.types import CallToolRequestParams, TextContent, Tool
 
 from computer_use.config import load_config
 from computer_use.core import (
+    DEFAULT_MOVE_DURATION,
     CoordinateSystem,
     click,
     create_redacted_image,
@@ -25,6 +28,7 @@ from computer_use.core import (
     screenshot,
     scroll,
     type_text,
+    validate_duration,
 )
 from computer_use.safety import (
     SafetyError,
@@ -88,7 +92,8 @@ TOOLS: list[Tool] = [
                 "y": {"type": "integer", "description": "Physical virtual screen y coordinate"},
                 "duration": {
                     "type": "number",
-                    "description": "Seconds to spend moving the cursor before clicking. Default 0.2. Increase if menus close prematurely.",
+                    "default": DEFAULT_MOVE_DURATION,
+                    "description": f"Seconds to spend moving the cursor before clicking. Default {DEFAULT_MOVE_DURATION}. Increase if menus close prematurely.",
                 },
             },
             "required": ["x", "y"],
@@ -104,7 +109,8 @@ TOOLS: list[Tool] = [
                 "y": {"type": "integer"},
                 "duration": {
                     "type": "number",
-                    "description": "Seconds to spend moving the cursor. Default 0.2. Increase if menus close prematurely.",
+                    "default": DEFAULT_MOVE_DURATION,
+                    "description": f"Seconds to spend moving the cursor. Default {DEFAULT_MOVE_DURATION}. Increase if menus close prematurely.",
                 },
             },
             "required": ["x", "y"],
@@ -159,6 +165,9 @@ def _call_tool(name: str, args: dict) -> str:
     except SafetyError as exc:
         logging.warning("safety block: %s", exc)
         return json.dumps({"error": str(exc)})
+    except ValueError as exc:
+        logging.warning("validation block: %s", exc)
+        return json.dumps({"error": str(exc)})
 
 
 def _dispatch_tool(name: str, args: dict, cs: CoordinateSystem) -> str:
@@ -209,23 +218,13 @@ def _dispatch_tool(name: str, args: dict, cs: CoordinateSystem) -> str:
 
     if name == "click":
         x, y = args["x"], args["y"]
-        duration = args.get("duration", 0.2)
-        size = cs.get_screen_size()
-        validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
-        info = inspect_point(x, y)
-        check_target_window(info.process_name, info.class_name, info.control_type)
-        click(x, y, duration=duration)
-        return json.dumps({"clicked": True, "x": x, "y": y, "duration": duration})
+        duration = args.get("duration", DEFAULT_MOVE_DURATION)
+        return _run_mouse_tool("click", x, y, duration, click, cs)
 
     if name == "move_to":
         x, y = args["x"], args["y"]
-        duration = args.get("duration", 0.2)
-        size = cs.get_screen_size()
-        validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
-        info = inspect_point(x, y)
-        check_target_window(info.process_name, info.class_name, info.control_type)
-        move_to(x, y, duration=duration)
-        return json.dumps({"moved": True, "x": x, "y": y, "duration": duration})
+        duration = args.get("duration", DEFAULT_MOVE_DURATION)
+        return _run_mouse_tool("move_to", x, y, duration, move_to, cs)
 
     if name == "scroll":
         amount = args["amount"]
@@ -264,6 +263,25 @@ def _dispatch_tool(name: str, args: dict, cs: CoordinateSystem) -> str:
         return json.dumps({"pressed": keys})
 
     raise ValueError(f"Unknown tool: {name}")
+
+
+def _run_mouse_tool(
+    name: str,
+    x: int,
+    y: int,
+    duration: float,
+    action: Callable[[int, int, float], Any],
+    cs: CoordinateSystem,
+) -> str:
+    """Run a mouse tool with shared validation, checks, and JSON response."""
+    validate_duration(duration)
+    size = cs.get_screen_size()
+    validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
+    info = inspect_point(x, y)
+    check_target_window(info.process_name, info.class_name, info.control_type)
+    action(x, y, duration)
+    result_key = "clicked" if name == "click" else "moved"
+    return json.dumps({result_key: True, "x": x, "y": y, "duration": duration})
 
 
 def _current_logical_position() -> tuple[int, int]:

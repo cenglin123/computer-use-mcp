@@ -137,3 +137,17 @@ def test_move_to_default_duration(monkeypatch) -> None:
     data = json.loads(result)
     assert data["duration"] == 0.2
     assert calls == [(100, 200, 0.2)]
+
+
+def test_click_negative_duration_returns_error() -> None:
+    result = _call_tool("click", {"x": 100, "y": 200, "duration": -0.1})
+    data = json.loads(result)
+    assert "error" in data
+    assert "duration" in data["error"].lower() or "non-negative" in data["error"].lower()
+
+
+def test_move_to_negative_duration_returns_error() -> None:
+    result = _call_tool("move_to", {"x": 100, "y": 200, "duration": -0.1})
+    data = json.loads(result)
+    assert "error" in data
+    assert "duration" in data["error"].lower() or "non-negative" in data["error"].lower()

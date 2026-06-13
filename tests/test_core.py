@@ -188,6 +188,42 @@ def test_move_to_uses_custom_duration(monkeypatch) -> None:
     assert calls == [(100, 200, 0.5)]
 
 
+def test_click_negative_duration_raises() -> None:
+    with pytest.raises(ValueError, match="duration"):
+        core.click(100, 200, duration=-0.1)
+
+
+def test_move_to_negative_duration_raises() -> None:
+    with pytest.raises(ValueError, match="duration"):
+        core.move_to(100, 200, duration=-0.1)
+
+
+def test_click_nan_duration_raises() -> None:
+    with pytest.raises(ValueError, match="NaN|duration"):
+        core.click(100, 200, duration=float("nan"))
+
+
+def test_move_to_nan_duration_raises() -> None:
+    with pytest.raises(ValueError, match="NaN|duration"):
+        core.move_to(100, 200, duration=float("nan"))
+
+
+def test_click_zero_duration_accepted(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "click", lambda x, y, duration: calls.append((x, y, duration)))
+    core.click(100, 200, duration=0.0)
+    assert calls == [(100, 200, 0.0)]
+
+
+def test_move_to_zero_duration_accepted(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "moveTo", lambda x, y, duration: calls.append((x, y, duration)))
+    core.move_to(100, 200, duration=0.0)
+    assert calls == [(100, 200, 0.0)]
+
+
 def test_mixed_dpi_fail_fast(monkeypatch) -> None:
     """CoordinateSystem should raise when monitors have mismatched scale ratios."""
     cs = core.CoordinateSystem.__new__(core.CoordinateSystem)
