@@ -53,10 +53,22 @@ def main(argv: list[str] | None = None) -> int:
     p_click = sub.add_parser("click", help="Click at physical virtual screen coordinates")
     p_click.add_argument("x", type=int)
     p_click.add_argument("y", type=int)
+    p_click.add_argument(
+        "--duration",
+        type=float,
+        default=0.2,
+        help="Seconds to spend moving the cursor before clicking (default: 0.2)",
+    )
 
     p_move = sub.add_parser("move", help="Move mouse to physical virtual screen coordinates")
     p_move.add_argument("x", type=int)
     p_move.add_argument("y", type=int)
+    p_move.add_argument(
+        "--duration",
+        type=float,
+        default=0.2,
+        help="Seconds to spend moving the cursor (default: 0.2)",
+    )
 
     p_scroll = sub.add_parser("scroll", help="Scroll at current or given position")
     p_scroll.add_argument("amount", type=int)
@@ -88,13 +100,13 @@ def main(argv: list[str] | None = None) -> int:
             validate_coordinate(args.x, args.y, size.width, size.height, monitors=cs.monitors)
             info = inspect_point(args.x, args.y)
             check_target_window(info.process_name, info.class_name, info.control_type)
-            click(args.x, args.y)
+            click(args.x, args.y, duration=args.duration)
         elif args.cmd == "move":
             size = cs.get_screen_size()
             validate_coordinate(args.x, args.y, size.width, size.height, monitors=cs.monitors)
             info = inspect_point(args.x, args.y)
             check_target_window(info.process_name, info.class_name, info.control_type)
-            move_to(args.x, args.y)
+            move_to(args.x, args.y, duration=args.duration)
         elif args.cmd == "scroll":
             if args.x is not None and args.y is not None:
                 size = cs.get_screen_size()

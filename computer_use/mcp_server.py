@@ -80,24 +80,32 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="click",
-        description="Click at the given physical virtual screen coordinates (x, y).",
+        description="Click at the given physical virtual screen coordinates (x, y). The cursor moves smoothly over a short duration to avoid closing hover-activated menus.",
         inputSchema={
             "type": "object",
             "properties": {
                 "x": {"type": "integer", "description": "Physical virtual screen x coordinate"},
                 "y": {"type": "integer", "description": "Physical virtual screen y coordinate"},
+                "duration": {
+                    "type": "number",
+                    "description": "Seconds to spend moving the cursor before clicking. Default 0.2. Increase if menus close prematurely.",
+                },
             },
             "required": ["x", "y"],
         },
     ),
     Tool(
         name="move_to",
-        description="Move the mouse cursor to the given physical virtual screen coordinates.",
+        description="Move the mouse cursor to the given physical virtual screen coordinates. The cursor moves smoothly over a short duration to avoid closing hover-activated menus.",
         inputSchema={
             "type": "object",
             "properties": {
                 "x": {"type": "integer"},
                 "y": {"type": "integer"},
+                "duration": {
+                    "type": "number",
+                    "description": "Seconds to spend moving the cursor. Default 0.2. Increase if menus close prematurely.",
+                },
             },
             "required": ["x", "y"],
         },
@@ -201,21 +209,23 @@ def _dispatch_tool(name: str, args: dict, cs: CoordinateSystem) -> str:
 
     if name == "click":
         x, y = args["x"], args["y"]
+        duration = args.get("duration", 0.2)
         size = cs.get_screen_size()
         validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
         info = inspect_point(x, y)
         check_target_window(info.process_name, info.class_name, info.control_type)
-        click(x, y)
-        return json.dumps({"clicked": True, "x": x, "y": y})
+        click(x, y, duration=duration)
+        return json.dumps({"clicked": True, "x": x, "y": y, "duration": duration})
 
     if name == "move_to":
         x, y = args["x"], args["y"]
+        duration = args.get("duration", 0.2)
         size = cs.get_screen_size()
         validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
         info = inspect_point(x, y)
         check_target_window(info.process_name, info.class_name, info.control_type)
-        move_to(x, y)
-        return json.dumps({"moved": True, "x": x, "y": y})
+        move_to(x, y, duration=duration)
+        return json.dumps({"moved": True, "x": x, "y": y, "duration": duration})
 
     if name == "scroll":
         amount = args["amount"]

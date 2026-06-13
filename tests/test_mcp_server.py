@@ -93,3 +93,25 @@ def test_click_gap_region() -> None:
     result = _call_tool("click", {"x": gap_x, "y": gap_y})
     data = json.loads(result)
     assert "error" in data or "gap" in result
+
+
+def test_click_accepts_duration(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
+    calls = []
+    monkeypatch.setattr(server, "click", lambda x, y, duration: calls.append((x, y, duration)))
+    result = _call_tool("click", {"x": 100, "y": 200, "duration": 0.5})
+    data = json.loads(result)
+    assert data["duration"] == 0.5
+    assert calls == [(100, 200, 0.5)]
+
+
+def test_move_to_accepts_duration(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
+    calls = []
+    monkeypatch.setattr(server, "move_to", lambda x, y, duration: calls.append((x, y, duration)))
+    result = _call_tool("move_to", {"x": 100, "y": 200, "duration": 0.8})
+    data = json.loads(result)
+    assert data["duration"] == 0.8
+    assert calls == [(100, 200, 0.8)]

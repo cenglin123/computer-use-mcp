@@ -150,6 +150,44 @@ def test_create_redacted_image() -> None:
     assert img.size == (100, 200)
 
 
+def _fake_coordinate_system() -> core.CoordinateSystem:
+    cs = core.CoordinateSystem.__new__(core.CoordinateSystem)
+    cs.to_physical = lambda x, y: (x, y)  # type: ignore[method-assign]
+    return cs
+
+
+def test_click_uses_default_duration(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "click", lambda x, y, duration: calls.append((x, y, duration)))
+    core.click(100, 200)
+    assert calls == [(100, 200, 0.2)]
+
+
+def test_click_uses_custom_duration(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "click", lambda x, y, duration: calls.append((x, y, duration)))
+    core.click(100, 200, duration=0.5)
+    assert calls == [(100, 200, 0.5)]
+
+
+def test_move_to_uses_default_duration(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "moveTo", lambda x, y, duration: calls.append((x, y, duration)))
+    core.move_to(100, 200)
+    assert calls == [(100, 200, 0.2)]
+
+
+def test_move_to_uses_custom_duration(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "moveTo", lambda x, y, duration: calls.append((x, y, duration)))
+    core.move_to(100, 200, duration=0.5)
+    assert calls == [(100, 200, 0.5)]
+
+
 def test_mixed_dpi_fail_fast(monkeypatch) -> None:
     """CoordinateSystem should raise when monitors have mismatched scale ratios."""
     cs = core.CoordinateSystem.__new__(core.CoordinateSystem)

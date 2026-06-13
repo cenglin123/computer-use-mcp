@@ -255,18 +255,28 @@ def create_redacted_image(width: int, height: int) -> str:
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
-def click(x: int, y: int) -> None:
-    """Click at physical virtual screen coordinates (x, y)."""
+def click(x: int, y: int, duration: float = 0.2) -> None:
+    """Click at physical virtual screen coordinates (x, y).
+
+    Args:
+        duration: Seconds to spend moving the cursor to the target before
+            clicking. A small positive value keeps hover-activated menus open.
+    """
     cs = get_coordinate_system()
     phys_x, phys_y = cs.to_physical(x, y)
-    pyautogui.click(phys_x, phys_y)
+    pyautogui.click(phys_x, phys_y, duration=duration)
 
 
-def move_to(x: int, y: int) -> None:
-    """Move the cursor to physical virtual screen coordinates (x, y)."""
+def move_to(x: int, y: int, duration: float = 0.2) -> None:
+    """Move the cursor to physical virtual screen coordinates (x, y).
+
+    Args:
+        duration: Seconds to spend moving the cursor. A small positive value
+            keeps hover-activated menus open.
+    """
     cs = get_coordinate_system()
     phys_x, phys_y = cs.to_physical(x, y)
-    pyautogui.moveTo(phys_x, phys_y)
+    pyautogui.moveTo(phys_x, phys_y, duration=duration)
 
 
 def scroll(amount: int, x: int | None = None, y: int | None = None) -> None:
