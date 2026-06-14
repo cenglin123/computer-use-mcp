@@ -97,6 +97,12 @@
 #### 变更内容
 - run_task_plan 截图不再产生重复 step_index；composite 与 snapshot.click_by_uid 增加 safety.py 校验；结构化错误（ui_not_found/stale_uid 等）写入 trace error_kind；batch 子步骤在 run_task_plan 下使用命名空间避免 step_index 冲突；batch final_screenshot 默认 monitor 改为 1；review_task 从 trace meta 读取 goal；report.md 包含 final_state_path。
 
+### docs: 维护文档体系，补充审计日志
+
+#### 变更内容
+- 运行 scripts/audit.py check 与 agent_links.py check；AGENTS.md 行数/字数接近上限但内容精简合理，暂不下沉；新增 docs/audit-log.md 记录审计结果。
+
+
 
 
 

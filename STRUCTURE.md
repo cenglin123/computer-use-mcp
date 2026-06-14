@@ -9,6 +9,7 @@
 | 部署与配置 | [docs/deployment.md](docs/deployment.md) |
 | 已知环境陷阱 | [docs/pitfalls.md](docs/pitfalls.md) |
 | 文档一致性审计 | [docs/audit-checklist.md](docs/audit-checklist.md) |
+| 审计日志 | [docs/audit-log.md](docs/audit-log.md) |
 | 当前任务状态 | [docs/CURRENT.md](docs/CURRENT.md) |
 | 项目记忆索引 | [.agent/memory/MEMORY.md](.agent/memory/MEMORY.md) |
 | 变更记录 | [CHANGELOG.md](CHANGELOG.md) |
