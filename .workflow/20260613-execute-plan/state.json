@@ -1,0 +1,24 @@
+{
+  "slug": "20260613-execute-plan",
+  "object": "docs/plans/active/mcp-gui-automation-improvements.md",
+  "started_at": "2026-06-13",
+  "completed_at": "2026-06-13",
+  "mode": "pipe",
+  "current_phase": 5,
+  "phases": [
+    {"id": 1, "name": "control-tools", "title": "Phase 1: 控件工具基础", "status": "done", "tests": "113 passed"},
+    {"id": 2, "name": "launch-tools", "title": "Phase 2: 启动工具", "status": "done", "tests": "127 passed"},
+    {"id": 3, "name": "semantic-click", "title": "Phase 3: click/move_to 语义化", "status": "done", "tests": "134 passed"},
+    {"id": 4, "name": "visual-docs", "title": "Phase 4: 视觉理解引导", "status": "done", "tests": "134 passed"},
+    {"id": 5, "name": "ocr-preheat", "title": "Phase 5: OCR 预热与性能", "status": "done", "tests": "142 passed"}
+  ],
+  "acceptance": {"status": "passed", "final_tests": "145 passed, 0 failed"},
+  "quality_gates": [
+    {"phase": 1, "command": "pytest tests/ -v", "result": "113 passed, 0 failed"},
+    {"phase": 2, "command": "pytest tests/ -v", "result": "127 passed, 0 failed"},
+    {"phase": 3, "command": "pytest tests/ -v", "result": "134 passed, 0 failed"},
+    {"phase": 4, "command": "pytest tests/ -v", "result": "134 passed, 0 failed"},
+    {"phase": 5, "command": "pytest tests/ -v", "result": "142 passed, 0 failed"},
+    {"phase": "acceptance-fix", "command": "pytest tests/ -v", "result": "145 passed, 0 failed"}
+  ]
+}
