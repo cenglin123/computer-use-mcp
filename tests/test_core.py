@@ -159,17 +159,21 @@ def _fake_coordinate_system() -> core.CoordinateSystem:
 def test_click_uses_default_duration(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
-    monkeypatch.setattr(core.pyautogui, "click", lambda x, y, duration: calls.append((x, y, duration)))
+    monkeypatch.setattr(
+        core.pyautogui, "click", lambda x, y, duration, button: calls.append((x, y, duration, button))
+    )
     core.click(100, 200)
-    assert calls == [(100, 200, 0.2)]
+    assert calls == [(100, 200, 0.2, "left")]
 
 
-def test_click_uses_custom_duration(monkeypatch) -> None:
+def test_click_uses_custom_duration_and_button(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
-    monkeypatch.setattr(core.pyautogui, "click", lambda x, y, duration: calls.append((x, y, duration)))
-    core.click(100, 200, duration=0.5)
-    assert calls == [(100, 200, 0.5)]
+    monkeypatch.setattr(
+        core.pyautogui, "click", lambda x, y, duration, button: calls.append((x, y, duration, button))
+    )
+    core.click(100, 200, duration=0.5, button="right")
+    assert calls == [(100, 200, 0.5, "right")]
 
 
 def test_move_to_uses_default_duration(monkeypatch) -> None:
@@ -211,9 +215,11 @@ def test_move_to_nan_duration_raises() -> None:
 def test_click_zero_duration_accepted(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
-    monkeypatch.setattr(core.pyautogui, "click", lambda x, y, duration: calls.append((x, y, duration)))
+    monkeypatch.setattr(
+        core.pyautogui, "click", lambda x, y, duration, button: calls.append((x, y, duration, button))
+    )
     core.click(100, 200, duration=0.0)
-    assert calls == [(100, 200, 0.0)]
+    assert calls == [(100, 200, 0.0, "left")]
 
 
 def test_move_to_zero_duration_accepted(monkeypatch) -> None:
@@ -274,3 +280,78 @@ def test_uniform_scaling_passes(monkeypatch) -> None:
 
     # Should complete without raising.
     cs._validate_uniform_scaling()
+
+
+def test_click_invalid_button_raises() -> None:
+    with pytest.raises(ValueError, match="Invalid mouse button"):
+        core.click(100, 200, button="side")
+
+
+def test_mouse_down_moves_and_presses(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "moveTo", lambda x, y: calls.append(("move", x, y)))
+    monkeypatch.setattr(core.pyautogui, "mouseDown", lambda button: calls.append(("down", button)))
+    core.mouse_down(100, 200, button="right")
+    assert calls == [("move", 100, 200), ("down", "right")]
+
+
+def test_mouse_up_without_coords_releases(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(core.pyautogui, "mouseUp", lambda button: calls.append(("up", button)))
+    core.mouse_up(button="left")
+    assert calls == [("up", "left")]
+
+
+def test_mouse_up_with_coords_moves_and_releases(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "moveTo", lambda x, y: calls.append(("move", x, y)))
+    monkeypatch.setattr(core.pyautogui, "mouseUp", lambda button: calls.append(("up", button)))
+    core.mouse_up(300, 400, button="right")
+    assert calls == [("move", 300, 400), ("up", "right")]
+
+
+def test_drag_moves_holds_and_releases(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "moveTo", lambda x, y, duration=0: calls.append(("move", x, y, duration)))
+    monkeypatch.setattr(core.pyautogui, "mouseDown", lambda button: calls.append(("down", button)))
+    monkeypatch.setattr(core.pyautogui, "mouseUp", lambda button: calls.append(("up", button)))
+    core.drag(10, 20, 110, 120, duration=0.5, button="left")
+    assert calls == [
+        ("move", 10, 20, 0),
+        ("down", "left"),
+        ("move", 110, 120, 0.5),
+        ("up", "left"),
+    ]
+
+
+def test_scroll_direction_up(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(core.pyautogui, "scroll", lambda amount, x=None, y=None: calls.append((amount, x, y)))
+    core.scroll(direction="up", clicks=5)
+    assert calls == [(5, None, None)]
+
+
+def test_scroll_direction_down(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(core.pyautogui, "scroll", lambda amount, x=None, y=None: calls.append((amount, x, y)))
+    core.scroll(direction="down", clicks=2)
+    assert calls == [(-2, None, None)]
+
+
+def test_scroll_amount_and_direction_conflict() -> None:
+    with pytest.raises(ValueError, match="amount or direction"):
+        core.scroll(amount=3, direction="up")
+
+
+def test_key_down_up_and_press(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(core.pyautogui, "keyDown", lambda key: calls.append(("down", key)))
+    monkeypatch.setattr(core.pyautogui, "keyUp", lambda key: calls.append(("up", key)))
+    monkeypatch.setattr(core.pyautogui, "press", lambda key: calls.append(("press", key)))
+    core.key_down("ctrl")
+    core.key_up("ctrl")
+    core.press_key("enter")
+    assert calls == [("down", "ctrl"), ("up", "ctrl"), ("press", "enter")]

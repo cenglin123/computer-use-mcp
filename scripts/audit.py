@@ -389,6 +389,88 @@ def _check_sync() -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# memory
+# ---------------------------------------------------------------------------
+
+def _check_memory() -> list[dict[str, Any]]:
+    """Check .agent/memory/ structure health.
+
+    Small projects (no .agent/memory/ dir) are not an error — they skip.
+    For projects with the directory, we verify:
+    - MEMORY.md exists and is non-empty
+    - AGENTS.md contains the pointer and inline section
+    - Links in MEMORY.md resolve to existing files
+    """
+    results: list[dict[str, Any]] = []
+    memory_dir = ROOT / ".agent" / "memory"
+
+    # Small projects: memory dir absence is OK
+    if not memory_dir.is_dir():
+        results.append({
+            "kind": "memory",
+            "status": "skip",
+            "detail": "No .agent/memory/ directory (small project or not enabled)",
+        })
+        return results
+
+    # Check MEMORY.md exists
+    mem_index = memory_dir / "MEMORY.md"
+    if not mem_index.is_file():
+        results.append({
+            "kind": "memory",
+            "status": "missing",
+            "detail": ".agent/memory/MEMORY.md missing",
+        })
+        return results
+
+    # Check MEMORY.md is not empty
+    if mem_index.stat().st_size == 0:
+        results.append({
+            "kind": "memory",
+            "status": "empty",
+            "detail": ".agent/memory/MEMORY.md is empty",
+        })
+
+    # Check AGENTS.md contains memory pointer and inline section
+    agents_md = ROOT / "AGENTS.md"
+    if agents_md.is_file():
+        content = _read(agents_md)
+        if ".agent/memory/MEMORY.md" not in content:
+            results.append({
+                "kind": "memory",
+                "status": "unlinked",
+                "detail": "AGENTS.md missing pointer to .agent/memory/MEMORY.md",
+            })
+        if "## 项目记忆" not in content:
+            results.append({
+                "kind": "memory",
+                "status": "unlinked",
+                "detail": "AGENTS.md missing inline memory section",
+            })
+
+    # Check referenced memory files exist
+    for target, _label, lineno in _extract_file_links(_read(mem_index)):
+        resolved = _resolve(target, mem_index.parent)
+        if not resolved.is_file():
+            results.append({
+                "kind": "memory",
+                "status": "dead_link",
+                "source": ".agent/memory/MEMORY.md",
+                "line": lineno,
+                "target": target,
+            })
+
+    if not results:
+        results.append({
+            "kind": "memory",
+            "status": "ok",
+            "detail": ".agent/memory/ structure healthy",
+        })
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # aggregate
 # ---------------------------------------------------------------------------
 
@@ -400,6 +482,7 @@ def _run_all() -> list[dict[str, Any]]:
     results.extend(_check_birth_record())
     results.extend(_check_line_budget())
     results.extend(_check_sync())
+    results.extend(_check_memory())
     return results
 
 
@@ -419,6 +502,8 @@ _STATUS_GLYPHS: dict[str, str] = {
     "broken":      "BROKEN",
     "error":       "ERROR",
     "skip":        "SKIP",
+    "empty":       "EMPTY",
+    "unlinked":    "UNLINK",
 }
 
 
@@ -468,6 +553,18 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
                 lines_out.append(f"[ERROR  ] sync check failed: {r['detail']}")
             elif r["status"] == "skip":
                 lines_out.append("[SKIP   ] sync check (agent_links.py unavailable)")
+        elif kind == "memory":
+            if r["status"] == "skip":
+                lines_out.append("[SKIP   ] memory (no .agent/memory/ directory)")
+            elif r["status"] == "ok":
+                if verbose:
+                    lines_out.append("[OK    ] memory structure healthy")
+            elif r["status"] == "dead_link":
+                lines_out.append(
+                    f"[DEAD   ] {r['source']}:{r['line']} -> {r['target']}"
+                )
+            else:
+                lines_out.append(f"[{glyph:<6}] memory: {r['detail']}")
     return "\n".join(lines_out)
 
 
@@ -517,6 +614,16 @@ def _cmd_drift(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def _cmd_memory(args: argparse.Namespace) -> None:
+    results = _check_memory()
+    if args.json:
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+    else:
+        print(_format_text(results, verbose=args.verbose))
+    if any(r["status"] not in ("ok", "skip") for r in results):
+        raise SystemExit(1)
+
+
 # ---------------------------------------------------------------------------
 # cli
 # ---------------------------------------------------------------------------
@@ -546,6 +653,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_drift.add_argument("--json", action="store_true", help="Output JSON")
     p_drift.add_argument("--verbose", action="store_true", help="Show OK entries")
     p_drift.set_defaults(func=_cmd_drift)
+
+    p_mem = sub.add_parser("memory", help="Memory structure check only")
+    p_mem.add_argument("--json", action="store_true", help="Output JSON")
+    p_mem.add_argument("--verbose", action="store_true", help="Show OK entries")
+    p_mem.set_defaults(func=_cmd_memory)
 
     return parser
 

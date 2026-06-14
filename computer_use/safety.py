@@ -6,6 +6,7 @@ All enforcement here is deterministic (hardcoded rules), not AI-based.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Iterable
 
 from computer_use.config import load_config
@@ -46,6 +47,73 @@ def _sensitive_window_classes() -> set[str]:
     config = load_config()
     extra = config.get("safety", {}).get("sensitive_window_classes", [])
     return _SENSITIVE_WINDOW_CLASSES | {c.lower() for c in extra}
+
+
+def _allowed_commands() -> set[str]:
+    """Return the configured allowed command whitelist as lowercase strings.
+
+    Each entry contributes both its full normalized value and its basename so
+    that absolute-path whitelists also allow invocation by executable name.
+    """
+    config = load_config()
+    commands = config.get("safety", {}).get("allowed_commands", [])
+    normalized: set[str] = set()
+    for cmd in commands:
+        value = str(cmd) if isinstance(cmd, Path) else cmd
+        normalized.add(_normalize_path(value))
+        normalized.add(_normalize_path(Path(value).name))
+    return normalized
+
+
+def _normalize_path(value: str) -> str:
+    """Normalize a path string for comparison (lowercase, forward slashes)."""
+    return value.lower().replace("\\", "/")
+
+
+def is_allowed_command(command: str | Path) -> bool:
+    """Return True if ``command`` is in the allowed-commands whitelist.
+
+    The whitelist contains exact command names and/or absolute paths. If the
+    configuration key is missing, an empty list is used and everything is
+    blocked.
+    """
+    allowed = _allowed_commands()
+    if not allowed:
+        return False
+
+    if isinstance(command, Path):
+        command_str = str(command)
+    else:
+        command_str = command
+
+    lowered = _normalize_path(command_str)
+    basename = _normalize_path(Path(command_str).name)
+    if lowered in allowed or basename in allowed:
+        return True
+
+    try:
+        resolved = _normalize_path(str(Path(command_str).resolve()))
+        if resolved in allowed:
+            return True
+    except Exception:  # pragma: no cover
+        pass
+
+    return False
+
+
+def contains_shell_metacharacters(text: str) -> bool:
+    """Return True if ``text`` contains shell metacharacters used for injection.
+
+    Metacharacters include command connectors, redirections, variable/expansion
+    markers, escaping characters, and newline separators.
+    """
+    metachar_pattern = re.compile(
+        r"[&|;<>^`]|"          # connectors, redirection, escape, backtick
+        r"%[^%]*%|"            # Windows environment expansion %VAR%
+        r"\$\([^)]*\)|"        # command substitution $()
+        r"[\r\n]",             # newline characters
+    )
+    return bool(metachar_pattern.search(text))
 
 
 def is_dangerous_text(text: str) -> bool:

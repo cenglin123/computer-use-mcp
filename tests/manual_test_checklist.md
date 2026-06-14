@@ -88,12 +88,15 @@
 
 | # | 测试项 | 调用方式 | 预期结果 | 验收方式 |
 |---|--------|----------|----------|----------|
-| 8.1 | `screenshot` | Kimi Code CLI 调用 | 返回 base64 PNG | 解码检查 |
-| 8.2 | `get_screen_size` | Kimi Code CLI 调用 | 返回虚拟屏幕尺寸 JSON | 检查字段 |
-| 8.3 | `get_monitors` | Kimi Code CLI 调用 | 返回显示器列表 JSON | 检查数组长度 |
+| 8.1 | `screenshot` | Kimi Code CLI 调用（默认） | 返回 JSON 含 `saved_path`/`timestamp`，不含 base64 | 检查文件已保存 |
+| 8.1a | `screenshot(save_path=...)` | Kimi Code CLI 调用 | PNG 保存到指定路径并返回路径 | 检查文件存在 |
+| 8.2 | `get_monitors` | Kimi Code CLI 调用 | 返回显示器列表 JSON | 检查数组长度 |
+| 8.3 | `batch`（默认） | Kimi Code CLI 调用 | 返回每步结果（含 `timestamp`），不含 `final_screenshot` | 检查返回值 |
+| 8.4 | `batch(final_screenshot=true)` | Kimi Code CLI 调用 | 返回每步结果及最终截图路径引用 | 检查 `final_screenshot.saved_path` 存在 |
 | 8.4 | `click` | Kimi Code CLI 调用 | 执行点击，返回成功 JSON | 检查返回值 |
 | 8.5 | `type` 危险文本 | Kimi Code CLI 调用 | 返回 `{"error": "..."}` | 检查返回值 |
 | 8.6 | `key_combo` | Kimi Code CLI 调用 | 执行组合键 | 目视 |
+| 8.7 | `sleep(duration=2)` | Kimi Code CLI 调用 | 等待 2 秒后返回 `{"slept": true, "duration": 2}` | 检查耗时与返回值 |
 
 ---
 

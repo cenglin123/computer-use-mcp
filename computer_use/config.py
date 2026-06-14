@@ -16,13 +16,16 @@ DEFAULT_CONFIG_PATH = (
 
 _DEFAULTS: dict[str, Any] = {
     "log_dir": Path.home() / ".kimi-code" / "logs",
+    "screenshot_dir": Path.home() / ".kimi-code" / "mcp" / "computer-use" / "screenshots",
+    "trace_dir": Path.home() / ".computer-use" / "traces",
     "safety": {
         "sensitive_processes": [],
         "sensitive_window_classes": [],
         "screenshot_sensitive_window_check": True,
+        "allowed_commands": [],
     },
     "display": {
-        "default_monitor": 0,
+        "default_monitor": 1,
     },
 }
 
@@ -37,6 +40,8 @@ def _load_config(path: Path | None = None) -> dict[str, Any]:
     path = path or DEFAULT_CONFIG_PATH
     config = {
         "log_dir": _expand_user(_DEFAULTS["log_dir"]),
+        "screenshot_dir": _expand_user(_DEFAULTS["screenshot_dir"]),
+        "trace_dir": _expand_user(_DEFAULTS["trace_dir"]),
         "safety": dict(_DEFAULTS["safety"]),
         "display": dict(_DEFAULTS["display"]),
     }
@@ -53,6 +58,12 @@ def _load_config(path: Path | None = None) -> dict[str, Any]:
     if "log_dir" in data:
         config["log_dir"] = Path(_expand_user(data["log_dir"]))
 
+    if "screenshot_dir" in data:
+        config["screenshot_dir"] = Path(_expand_user(data["screenshot_dir"]))
+
+    if "trace_dir" in data:
+        config["trace_dir"] = Path(_expand_user(data["trace_dir"]))
+
     safety = data.get("safety", {})
     config["safety"]["sensitive_processes"] = list(
         safety.get("sensitive_processes", [])
@@ -62,6 +73,9 @@ def _load_config(path: Path | None = None) -> dict[str, Any]:
     )
     config["safety"]["screenshot_sensitive_window_check"] = bool(
         safety.get("screenshot_sensitive_window_check", True)
+    )
+    config["safety"]["allowed_commands"] = list(
+        safety.get("allowed_commands", [])
     )
 
     display = data.get("display", {})

@@ -3,6 +3,8 @@
 # Kimi Code CLI. See README.md for the Kimi Code CLI registration snippet.
 
 log_dir: ~/.kimi-code/logs
+screenshot_dir: ~/.kimi-code/mcp/computer-use/screenshots
+trace_dir: ~/.computer-use/traces
 
 safety:
   # List of additional process names to treat as sensitive.
@@ -15,7 +17,12 @@ safety:
   # warn/blank them. This is advisory in MVP; full protection requires user care.
   screenshot_sensitive_window_check: true
 
+  # List of allowed command names or absolute paths for the launch_app tool.
+  # If unset or empty, all commands are blocked.
+  allowed_commands:
+    - C:/Program Files (x86)/HiBit Uninstaller/HiBitUninstaller.exe
+
 display:
   # Default monitor for screenshot when no monitor argument is provided.
-  # 0 = entire virtual desktop (default). 1 = primary monitor, 2+ = secondary.
-  default_monitor: 0
+  # 1 = primary monitor (default). 0 = entire virtual desktop, 2+ = secondary.
+  default_monitor: 1

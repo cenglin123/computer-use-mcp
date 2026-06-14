@@ -11,10 +11,11 @@ def test_load_config_defaults(tmp_path: Path) -> None:
     config.reset_config_cache()
     cfg = config.load_config(tmp_path / "nonexistent.yaml")
     assert cfg["log_dir"] == Path.home() / ".kimi-code" / "logs"
+    assert cfg["screenshot_dir"] == Path.home() / ".kimi-code" / "mcp" / "computer-use" / "screenshots"
     assert cfg["safety"]["sensitive_processes"] == []
     assert cfg["safety"]["sensitive_window_classes"] == []
     assert cfg["safety"]["screenshot_sensitive_window_check"] is True
-    assert cfg["display"]["default_monitor"] == 0
+    assert cfg["display"]["default_monitor"] == 1
 
 
 def test_load_config_override(tmp_path: Path) -> None:
@@ -23,6 +24,7 @@ def test_load_config_override(tmp_path: Path) -> None:
     path.write_text(
         """
 log_dir: ~/custom-logs
+screenshot_dir: ~/custom-shots
 safety:
   sensitive_processes: ["myapp"]
   sensitive_window_classes: ["MyClass"]
@@ -34,6 +36,7 @@ display:
     )
     cfg = config.load_config(path)
     assert cfg["log_dir"] == Path.home() / "custom-logs"
+    assert cfg["screenshot_dir"] == Path.home() / "custom-shots"
     assert cfg["safety"]["sensitive_processes"] == ["myapp"]
     assert cfg["safety"]["sensitive_window_classes"] == ["MyClass"]
     assert cfg["safety"]["screenshot_sensitive_window_check"] is False

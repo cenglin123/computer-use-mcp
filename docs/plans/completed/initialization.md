@@ -54,3 +54,4 @@
 
 - 2026-06-13：完成初始化并提交首次 commit `8aa3881`。
 - 2026-06-13：reviewer-perspective 自检通过。新上下文只读 AGENTS.md 后能正确回答：项目做什么、不可修改的文件/规则、完工检查清单、复杂任务入口。
+- 2026-06-13：按新版 `init-agent-docs` skill 升级文档体系：重写 AGENTS.md（新增 Compact 恢复、项目记忆、复杂任务闭环升级触发），创建 `.agent/memory/MEMORY.md`，更新 `docs/CURRENT.md` / `docs/audit-checklist.md` / `STRUCTURE.md`，升级 `scripts/audit.py` 并定制 `DRIFT_PATTERNS`。`agent_links check`、`audit.py check`、pre-commit hook 均通过。

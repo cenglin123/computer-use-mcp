@@ -2,16 +2,28 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from computer_use.config import load_config, reset_config_cache
 from computer_use.safety import (
     SafetyError,
+    contains_shell_metacharacters,
+    is_allowed_command,
     is_dangerous_text,
     is_path_deletion,
     validate_coordinate,
     validate_monitor_index,
     validate_text_input,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_config():
+    reset_config_cache()
+    yield
+    reset_config_cache()
 
 
 @pytest.mark.parametrize(
@@ -94,3 +106,53 @@ def test_validate_monitor_index() -> None:
         validate_monitor_index(3, 2)
     with pytest.raises(SafetyError):
         validate_monitor_index("1", 2)
+
+
+@pytest.mark.parametrize(
+    "command,allowed,expected",
+    [
+        ("notepad.exe", ["notepad.exe"], True),
+        ("NOTEPAD.EXE", ["notepad.exe"], True),
+        ("calc.exe", ["notepad.exe"], False),
+        ("notepad.exe", [], False),
+        ("/usr/bin/git", ["/usr/bin/git"], True),
+    ],
+)
+def test_is_allowed_command(command: str, allowed: list[str], expected: bool) -> None:
+    reset_config_cache()
+    config = load_config()
+    config["safety"]["allowed_commands"] = allowed
+    assert is_allowed_command(command) is expected
+
+
+def test_is_allowed_command_path_object(monkeypatch) -> None:
+    reset_config_cache()
+    config = load_config()
+    config["safety"]["allowed_commands"] = ["C:/Program Files/App/app.exe"]
+    assert is_allowed_command(Path("C:/Program Files/App/app.exe")) is True
+    assert is_allowed_command("app.exe") is True
+    assert is_allowed_command("other.exe") is False
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("cmd.exe /c echo hello", False),
+        ("notepad.exe && calc.exe", True),
+        ("cmd | more", True),
+        ("cmd ; calc", True),
+        ("echo > file.txt", True),
+        ("echo < file.txt", True),
+        ("echo >> file.txt", True),
+        ("echo ^hello", True),
+        ("echo %PATH%", True),
+        ("echo $(date)", True),
+        ("echo `date`", True),
+        ("echo hello\nworld", True),
+        ("echo hello\rworld", True),
+        ("notepad.exe", False),
+        ("C:/Program Files/App/app.exe", False),
+    ],
+)
+def test_contains_shell_metacharacters(text: str, expected: bool) -> None:
+    assert contains_shell_metacharacters(text) is expected

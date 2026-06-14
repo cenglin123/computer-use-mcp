@@ -6,6 +6,7 @@ import base64
 import ctypes
 import io
 import sys
+from pathlib import Path
 from typing import NamedTuple
 
 import mss
@@ -27,6 +28,17 @@ pyautogui.FAILSAFE = True
 
 #: Default duration (seconds) for smooth cursor movement in mouse tools.
 DEFAULT_MOVE_DURATION: float = 0.2
+
+#: Supported mouse buttons for low-level input primitives.
+VALID_MOUSE_BUTTONS = {"left", "right", "middle"}
+
+
+def validate_button(button: str) -> str:
+    """Return a normalized mouse button name or raise ValueError."""
+    normalized = button.lower()
+    if normalized not in VALID_MOUSE_BUTTONS:
+        raise ValueError(f"Invalid mouse button: {button!r}. Use left/right/middle.")
+    return normalized
 
 
 class ScreenInfo(NamedTuple):
@@ -250,12 +262,46 @@ def screenshot(monitor: int = 0) -> str:
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
+def save_screenshot(path: str | Path, monitor: int = 0) -> Path:
+    """Take a screenshot and save it as a PNG file.
+
+    Args:
+        path: Destination file path. Parent directory must exist.
+        monitor: 0 for the entire virtual desktop, or a 1-based mss monitor
+            index (1 = primary, 2 = secondary, etc.).
+
+    Returns:
+        The resolved Path of the saved file.
+    """
+    dest = Path(path).resolve()
+    if not dest.parent.is_dir():
+        raise ValueError(f"Directory does not exist: {dest.parent}")
+
+    with mss.MSS() as sct:
+        if monitor < 0 or monitor >= len(sct.monitors):
+            raise ValueError(f"Invalid monitor index: {monitor}")
+        img = sct.grab(sct.monitors[monitor])
+    pil_img = Image.frombytes("RGB", img.size, img.rgb)
+    pil_img.save(dest, format="PNG")
+    return dest
+
+
 def create_redacted_image(width: int, height: int) -> str:
     """Return a fully-redacted red image as a base64 PNG."""
     pil_img = Image.new("RGB", (width, height), color=(255, 0, 0))
     buffer = io.BytesIO()
     pil_img.save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+
+def save_redacted_image(path: str | Path, width: int, height: int) -> Path:
+    """Save a fully-redacted red image as a PNG file."""
+    dest = Path(path).resolve()
+    if not dest.parent.is_dir():
+        raise ValueError(f"Directory does not exist: {dest.parent}")
+    pil_img = Image.new("RGB", (width, height), color=(255, 0, 0))
+    pil_img.save(dest, format="PNG")
+    return dest
 
 
 def validate_duration(duration: float) -> float:
@@ -279,18 +325,37 @@ def validate_duration(duration: float) -> float:
     return duration
 
 
-def click(x: int, y: int, duration: float = DEFAULT_MOVE_DURATION) -> None:
+def click(x: int, y: int, duration: float = DEFAULT_MOVE_DURATION, button: str = "left") -> None:
     """Click at physical virtual screen coordinates (x, y).
 
     Args:
         duration: Seconds to spend moving the cursor to the target before
             clicking. Defaults to ``DEFAULT_MOVE_DURATION``. A small positive
             value keeps hover-activated menus open.
+        button: Mouse button to click. One of ``left`` (default), ``right``,
+            or ``middle``.
     """
     validate_duration(duration)
+    button = validate_button(button)
     cs = get_coordinate_system()
     phys_x, phys_y = cs.to_physical(x, y)
-    pyautogui.click(phys_x, phys_y, duration=duration)
+    pyautogui.click(phys_x, phys_y, duration=duration, button=button)
+
+
+def double_click(x: int, y: int, duration: float = DEFAULT_MOVE_DURATION, button: str = "left") -> None:
+    """Double-click at physical virtual screen coordinates (x, y).
+
+    Args:
+        duration: Seconds to spend moving the cursor to the target before
+            double-clicking. Defaults to ``DEFAULT_MOVE_DURATION``.
+        button: Mouse button to double-click. One of ``left`` (default),
+            ``right``, or ``middle``.
+    """
+    validate_duration(duration)
+    button = validate_button(button)
+    cs = get_coordinate_system()
+    phys_x, phys_y = cs.to_physical(x, y)
+    pyautogui.doubleClick(phys_x, phys_y, duration=duration, button=button)
 
 
 def move_to(x: int, y: int, duration: float = DEFAULT_MOVE_DURATION) -> None:
@@ -323,6 +388,104 @@ def type_text(text: str, interval: float = 0.01) -> None:
 
 def key_combo(*keys: str) -> None:
     pyautogui.hotkey(*keys)
+
+
+def mouse_down(x: int, y: int, button: str = "left") -> None:
+    """Press a mouse button at physical virtual screen coordinates (x, y)."""
+    button = validate_button(button)
+    cs = get_coordinate_system()
+    phys_x, phys_y = cs.to_physical(x, y)
+    pyautogui.moveTo(phys_x, phys_y)
+    pyautogui.mouseDown(button=button)
+
+
+def mouse_up(x: int | None = None, y: int | None = None, button: str = "left") -> None:
+    """Release a mouse button, optionally after moving to (x, y)."""
+    button = validate_button(button)
+    if x is not None and y is not None:
+        cs = get_coordinate_system()
+        phys_x, phys_y = cs.to_physical(x, y)
+        pyautogui.moveTo(phys_x, phys_y)
+    pyautogui.mouseUp(button=button)
+
+
+def drag(
+    start_x: int,
+    start_y: int,
+    end_x: int,
+    end_y: int,
+    duration: float = DEFAULT_MOVE_DURATION,
+    button: str = "left",
+) -> None:
+    """Drag the mouse from (start_x, start_y) to (end_x, end_y).
+
+    Args:
+        duration: Seconds to spend moving the cursor from the start point to
+            the end point while the button is held.
+        button: Mouse button to hold during the drag. Defaults to ``left``.
+    """
+    validate_duration(duration)
+    button = validate_button(button)
+    cs = get_coordinate_system()
+    phys_start_x, phys_start_y = cs.to_physical(start_x, start_y)
+    phys_end_x, phys_end_y = cs.to_physical(end_x, end_y)
+    pyautogui.moveTo(phys_start_x, phys_start_y)
+    pyautogui.mouseDown(button=button)
+    pyautogui.moveTo(phys_end_x, phys_end_y, duration=duration)
+    pyautogui.mouseUp(button=button)
+
+
+def scroll(
+    amount: int | None = None,
+    x: int | None = None,
+    y: int | None = None,
+    direction: str | None = None,
+    clicks: int = 3,
+) -> None:
+    """Scroll the mouse wheel by amount, optionally at physical virtual screen coordinates.
+
+    Args:
+        amount: Number of scroll units. Positive scrolls up, negative down.
+            If omitted, ``direction`` and ``clicks`` are used.
+        direction: ``up`` or ``down``. Mutually exclusive with ``amount``.
+        clicks: Number of clicks when ``direction`` is provided. Defaults to 3.
+    """
+    if amount is not None and direction is not None:
+        raise ValueError("Specify either amount or direction, not both.")
+
+    if direction is not None:
+        normalized = direction.lower()
+        if normalized == "up":
+            amount = abs(clicks)
+        elif normalized == "down":
+            amount = -abs(clicks)
+        else:
+            raise ValueError(f"Invalid scroll direction: {direction!r}. Use up/down.")
+
+    if amount is None:
+        amount = 0
+
+    if x is not None and y is not None:
+        cs = get_coordinate_system()
+        phys_x, phys_y = cs.to_physical(x, y)
+        pyautogui.scroll(amount, phys_x, phys_y)
+    else:
+        pyautogui.scroll(amount)
+
+
+def key_down(key: str) -> None:
+    """Hold a keyboard key down (press without release)."""
+    pyautogui.keyDown(key)
+
+
+def key_up(key: str) -> None:
+    """Release a keyboard key held with ``key_down``."""
+    pyautogui.keyUp(key)
+
+
+def press_key(key: str) -> None:
+    """Press and release a single keyboard key."""
+    pyautogui.press(key)
 
 
 if __name__ == "__main__":  # pragma: no cover
