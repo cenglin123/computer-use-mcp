@@ -196,6 +196,47 @@ def test_scroll_until_reaches_max_attempts(monkeypatch) -> None:
     assert len(scroll_calls) == 3
 
 
+def test_scroll_until_checks_current_cursor_target_before_scrolling(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        composite_mod,
+        "find_control",
+        lambda **kwargs: {
+            "found": False,
+            "uia_available": True,
+            "blocked": False,
+            "reason": "not_found",
+        },
+    )
+    monkeypatch.setattr(composite_mod.pyautogui, "position", lambda: (250, 350))
+    monkeypatch.setattr(
+        composite_mod,
+        "inspect_point",
+        lambda x, y: SimpleNamespace(
+            process_name="safe.exe",
+            class_name="SafePane",
+            control_type="Pane",
+        ),
+    )
+    checks = []
+    monkeypatch.setattr(
+        composite_mod,
+        "check_target_window",
+        lambda process, class_name, control_type: checks.append(
+            (process, class_name, control_type)
+        ),
+    )
+    monkeypatch.setattr(composite_mod, "scroll", lambda **kwargs: None)
+
+    composite_mod.scroll_until("Target", max_attempts=2, interval=0)
+
+    assert checks == [
+        ("safe.exe", "SafePane", "Pane"),
+        ("safe.exe", "SafePane", "Pane"),
+    ]
+
+
 def test_click_by_uid_delegates_to_snapshot(monkeypatch) -> None:
     snapshot = {"controls": []}
 

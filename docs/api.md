@@ -19,7 +19,7 @@
 
 多模态模型已经能直接读图，因此不再提供 OCR 工具；需要精确文字时让模型直接看图识别即可。
 
-**上下文保护原则**：`screenshot` 始终将 PNG 保存到本地目录，上下文只保留文件路径引用，绝不返回 base64 图像。默认保存到 `~/.kimi-code/mcp/computer-use/screenshots/`，可通过 `save_path` 覆盖，或在 `config.yaml` 中配置 `screenshot_dir`。`batch` 的 `final_screenshot` 也默认关闭。
+**上下文保护原则**：`screenshot` 始终将 PNG 保存到本地目录，上下文只保留文件路径引用，绝不返回 base64 图像。默认保存到 `~/.kimi-code/mcp/computer-use/screenshots/`；显式 `save_path` 必须位于配置的 `screenshot_dir` 内，不能使用 `..`、UNC、盘符相对路径或目录本身逃逸。`batch` 的 `final_screenshot` 默认关闭。
 
 ## 工具分类
 
@@ -38,7 +38,7 @@
   - `match`：与 `target_name` 配合，取值 `exact` / `contains` / `startswith`，默认 `contains`。
 - `mouse_down` / `mouse_up`：在指定坐标按下或释放鼠标按键，支持 `left`/`right`/`middle`。`mouse_up` 的坐标可选；省略时在光标当前位置释放。
 - `drag`：从 `(start_x, start_y)` 拖拽到 `(end_x, end_y)`，支持指定 `button` 和 `duration`。
-- `scroll`：滚动鼠标滚轮。可用 `amount`（正数向上、负数向下），或改用 `direction`（`up`/`down`）+ `clicks`。
+- `scroll`：滚动鼠标滚轮。可用 `amount`（正数向上、负数向下），或改用 `direction`（`up`/`down`）+ `clicks`。省略坐标时仍会检查当前光标所在目标窗口。
 - `type`：模拟键盘输入文本。当前光标位置决定输入目标。
 - `key_combo`：模拟组合键（如 `ctrl`, `c`）。
 - `key_down` / `key_up` / `press_key`：更细粒度的键盘事件，分别用于按住、释放、按压单个键，便于构造 `ctrl`/`shift`/`alt` 等组合或长按场景。
@@ -66,7 +66,7 @@
   - `final_screenshot`（默认 `false`）：执行完成后是否追加一张最终截图。截图会保存到磁盘并在 `final_screenshot` 中返回 `{saved_path, monitor, width, height, timestamp}`，不会返回 base64。
   - `screenshot_monitor`（默认 `1`）：最终截图的显示器索引，`0` 表示整个虚拟桌面。
 
-返回 JSON 包含 `results`（每步结果，含 `index`、`tool`、`result` 或 `error`、`timestamp`，如果该步开启 `capture_snapshot` 还会包含 `snapshot` 路径）、`failed_index`（失败位置，无失败为 `null`）、`trace_id`（本次批量调用生成的 trace ID，可用于事后审计）、`timestamp`；当 `final_screenshot=true` 时还会包含 `final_screenshot`（保存路径引用）。嵌套的 `batch` 会被拒绝。
+返回 JSON 包含 `results`（每步结果，含 `index`、`tool`、`result` 或 `error`、`timestamp`，如果该步开启 `capture_snapshot` 还会包含 `snapshot` 路径）、`failed_index`（失败位置，无失败为 `null`）、`trace_id`（本次批量调用生成的 trace ID，可用于事后审计）、`timestamp`；当 `final_screenshot=true` 时还会包含 `final_screenshot`（保存路径引用）。`timeout=true` 视为失败。`batch` 内禁止再次调用 `batch` 或 `run_task_plan`，单次最多展开 100 个动作。
 
 `batch` 典型调用示例（等待时间单位为秒）：
 
@@ -127,29 +127,34 @@
 - `run_task_plan`：执行任务级结构化计划。参数：
   - `trace_id`（可选）：复用已有 ID；省略则 server 生成。
   - `goal`（可选）：任务目标，写入 `report.md`。
-  - `steps`：步骤数组，每项 `{"tool": ..., "args": ...}`，支持所有 MCP 工具（含复合工具）。
+  - `steps`：步骤数组，每项 `{"tool": ..., "args": ...}`，支持普通工具、复合工具和一层 `batch`，禁止嵌套 `run_task_plan`。
   - `final_state`（默认 `false`）：任务结束时是否捕获 `get_ui_snapshot(include_screenshot=true)`。
   - `capture_screenshots`（默认 `true`）：是否为每个 step 自动截图并写入 trace。
-  返回 `trace_id`、`results`、`report_path`、`failed_index`，以及可选的 `final_state_path`。
+  返回 `trace_id`、`results`、`report_path`、`failed_index`，以及可选的 `final_state_path`。`error`、`timeout=true` 和 PyAutoGUI fail-safe 均按失败处理；单次最多展开 100 个步骤。
 - `retry_step(trace_id, step_index, mode)`：重放 trace 中的某一步。
   - `mode="single"`（默认）：仅重执行该 step。
   - `mode="from_step"`：从该 step 起顺序重放后续所有 step。
   - 重放使用新的 `step_index` 字符串，如 `"3.retry.1"`，追加到原 `trace.jsonl`。
   - 重放时不直接复用旧结果，而是重新调用底层工具，由当前 UI 状态重新定位并重新执行安全检查。
+  - 含已脱敏输入的步骤标记为 `replayable=false`，返回 `retry_not_supported_for_redacted_step`，不会执行脱敏占位符。
 - `review_task(trace_id)`：读取 trace 并生成确定性统计摘要（总步骤数、成功/失败/重试数、错误类型分布、平均耗时、截图/快照索引），不调用 LLM。
 
 ## Trace 与复盘
 
 - 每个工具调用（包括 `batch` 子步骤和单独工具）都会写入结构化 trace，目录由 `config.yaml` 的 `trace_dir` 配置，默认 `~/.computer-use/traces/`。
 - `batch` 返回的 `trace_id` 可用于在对应目录下找到 `trace.jsonl`、截图和快照（若启用）。
-- 单条 trace 记录包含 `trace_id`、`step_index`、`tool`、`args`、`result`、`duration_ms`、`screenshot_path`、`ui_snapshot_path`、`error_kind`、`error_message`。
+- 单条 trace 记录包含 `trace_id`、`step_index`、`tool`、`args`、`result`、`duration_ms`、`screenshot_path`、`ui_snapshot_path`、`error_kind`、`error_message`、`replayable`。
 - 当前 `error_kind` 取值：`safety_block` / `ui_not_found` / `stale_uid` / `timeout` / `fail_safe` / `unknown`，未出错时为 `null`。
-- Trace 只记录 server 内部执行信息，不记录多模态模型推理时间，也不包含截图 base64；复盘时通过路径引用读取对应截图或快照。
+- `trace_id` 只允许安全的单一 ASCII 路径组件，所有读写入口使用同一校验。
+- Trace 和工具日志会递归移除 `text`、`value`、`password`、`secret` 字段正文，只保留脱敏标记和长度；关联结果或错误中的相同正文也会替换。
+- Trace 不记录多模态模型推理时间，也不包含截图 base64；复盘时通过路径引用读取对应截图或快照。
 
 ## 安全行为
 
 - 输入类工具会检查目标坐标所在进程的 `process_name`、`class_name`、`control_type`。
 - 如果目标进程在白名单之外，操作会被拒绝。白名单逻辑见 `safety.py`。
-- 文本输入工具会检查当前焦点控件是否为密码框，避免泄露敏感信息。
+- 文本输入允许密码框，这是当前产品特性；输入正文不会写入日志或 trace。
 - `find_control` 默认开启 `sensitive_check=True`；命中敏感窗口时返回 `{"found": false, "blocked": true}`，而不会触发真实点击。
 - `launch_app` 使用 `safety.allowed_commands` 白名单校验目标可执行文件。
+- `allowed_commands` 中带路径分隔符的条目只按完整路径匹配；只有显式配置的裸文件名才按 basename 匹配。
+- 截图敏感检测覆盖捕获范围内的可见顶层窗口；UIA 枚举不可用时回退到中心点检查。

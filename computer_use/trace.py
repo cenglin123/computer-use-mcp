@@ -12,6 +12,7 @@ own one-record trace.
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import string
 import time
@@ -24,6 +25,16 @@ from computer_use.config import load_config
 
 
 _ALPHANUM = string.ascii_lowercase + string.digits
+_TRACE_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+_WINDOWS_DEVICE_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+}
+_SENSITIVE_INPUT_KEYS = {"text", "value", "password", "secret"}
 
 
 def generate_trace_id() -> str:
@@ -42,8 +53,20 @@ def trace_dir() -> Path:
     return path
 
 
+def validate_trace_id(trace_id: str) -> str:
+    """Reject trace IDs that are unsafe as a single Windows path component."""
+    if not isinstance(trace_id, str) or not _TRACE_ID_PATTERN.fullmatch(trace_id):
+        raise ValueError("Invalid trace_id")
+    if trace_id.endswith("."):
+        raise ValueError("Invalid trace_id")
+    if trace_id.split(".", 1)[0].upper() in _WINDOWS_DEVICE_NAMES:
+        raise ValueError("Invalid trace_id")
+    return trace_id
+
+
 def trace_root(trace_id: str) -> Path:
     """Return ``<trace_dir>/<trace_id>`` creating sub-dirs."""
+    validate_trace_id(trace_id)
     root = trace_dir() / trace_id
     root.mkdir(parents=True, exist_ok=True)
     (root / "screenshots").mkdir(exist_ok=True)
@@ -64,6 +87,7 @@ def write_trace_meta(trace_id: str, goal: str | None = None) -> Path:
 
 def read_trace_meta(trace_id: str) -> dict[str, Any]:
     """Read task metadata for ``trace_id`` if it exists."""
+    validate_trace_id(trace_id)
     meta_path = trace_dir() / trace_id / "meta.json"
     if not meta_path.exists():
         return {}
@@ -89,6 +113,7 @@ class TraceRecord:
     ui_snapshot_path: str | None = None
     error_kind: str | None = None
     error_message: str | None = None
+    replayable: bool = True
 
     def __post_init__(self) -> None:
         if not self.start_time:
@@ -108,11 +133,82 @@ def _serialize(value: Any) -> Any:
     return value
 
 
+def _redacted_value(value: Any) -> dict[str, Any]:
+    length = len(value) if isinstance(value, (str, bytes, list, tuple)) else None
+    redacted: dict[str, Any] = {"redacted": True}
+    if length is not None:
+        redacted["length"] = length
+    return redacted
+
+
+def _sanitize_arguments(value: Any) -> tuple[Any, list[str], bool]:
+    secrets: list[str] = []
+    redacted = False
+
+    def visit(item: Any) -> Any:
+        nonlocal redacted
+        if isinstance(item, dict):
+            cleaned: dict[str, Any] = {}
+            for key, child in item.items():
+                if str(key).lower() in _SENSITIVE_INPUT_KEYS:
+                    if isinstance(child, str) and child:
+                        secrets.append(child)
+                    cleaned[key] = _redacted_value(child)
+                    redacted = True
+                else:
+                    cleaned[key] = visit(child)
+            return cleaned
+        if isinstance(item, list):
+            return [visit(child) for child in item]
+        if isinstance(item, tuple):
+            return [visit(child) for child in item]
+        return item
+
+    return visit(value), secrets, redacted
+
+
+def _redact_secret_strings(value: Any, secrets: list[str]) -> Any:
+    if isinstance(value, str):
+        cleaned = value
+        for secret in sorted(secrets, key=len, reverse=True):
+            cleaned = cleaned.replace(secret, "<redacted>")
+        return cleaned
+    if isinstance(value, dict):
+        return {
+            key: _redact_secret_strings(child, secrets)
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_secret_strings(child, secrets) for child in value]
+    if isinstance(value, tuple):
+        return [_redact_secret_strings(child, secrets) for child in value]
+    return value
+
+
+def sanitize_for_logging(args: dict[str, Any]) -> dict[str, Any]:
+    """Return arguments with typed/form values removed for safe logging."""
+    cleaned, _, _ = _sanitize_arguments(args)
+    return cleaned
+
+
+def sanitize_message(args: dict[str, Any], message: str) -> str:
+    """Remove input values from an exception or diagnostic message."""
+    _, secrets, _ = _sanitize_arguments(args)
+    return _redact_secret_strings(message, secrets)
+
+
 def write_record(record: TraceRecord) -> Path:
     """Append a trace record to ``<trace_id>/trace.jsonl``."""
     root = trace_root(record.trace_id)
     trace_file = root / "trace.jsonl"
     data = {k: _serialize(v) for k, v in asdict(record).items()}
+    cleaned_args, secrets, redacted = _sanitize_arguments(data["args"])
+    data["args"] = cleaned_args
+    data["result"] = _redact_secret_strings(data["result"], secrets)
+    data["error_message"] = _redact_secret_strings(
+        data["error_message"], secrets
+    )
+    data["replayable"] = bool(data["replayable"]) and not redacted
     with open(trace_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(data, ensure_ascii=False) + "\n")
     return trace_file
@@ -151,6 +247,7 @@ def record_step(
 
 def read_trace(trace_id: str) -> list[dict[str, Any]]:
     """Read all records for a trace ID."""
+    validate_trace_id(trace_id)
     trace_file = trace_dir() / trace_id / "trace.jsonl"
     if not trace_file.exists():
         return []

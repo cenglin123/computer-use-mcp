@@ -92,13 +92,18 @@ _config_cache: dict[str, Any] | None = None
 def load_config(path: Path | None = None) -> dict[str, Any]:
     """Load and cache the server configuration.
 
-    The configuration is read from ``~/.kimi-code/mcp/computer-use/config.yaml``
-    and merged with hardcoded defaults. The result is cached for the lifetime of
-    the process.
+    An explicit path takes precedence over ``COMPUTER_USE_CONFIG``, followed by
+    the default user configuration path. The result is cached for the lifetime
+    of the process.
     """
     global _config_cache
     if _config_cache is None:
-        _config_cache = _load_config(path)
+        selected_path = path
+        if selected_path is None:
+            selected_path = Path(
+                os.environ.get("COMPUTER_USE_CONFIG", DEFAULT_CONFIG_PATH)
+            )
+        _config_cache = _load_config(selected_path)
     return _config_cache
 
 

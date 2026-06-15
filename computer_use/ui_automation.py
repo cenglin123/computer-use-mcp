@@ -182,6 +182,46 @@ def inspect_point(x: int, y: int) -> ControlInfo:
         )
 
 
+def get_top_level_windows_in_rect(
+    bounds: tuple[int, int, int, int],
+) -> list[ControlInfo] | None:
+    """Return visible top-level UIA windows intersecting ``bounds``.
+
+    ``None`` indicates that UIA enumeration was unavailable or failed, allowing
+    callers to choose a conservative fallback.
+    """
+    root = _get_root_control()
+    if root is None:
+        return None
+
+    left, top, right, bottom = bounds
+    windows: list[ControlInfo] = []
+    try:
+        control = getattr(root, "GetFirstChildControl", lambda: None)()
+        while control is not None:
+            control_type = (
+                getattr(control, "ControlTypeName", "") or ""
+            ).lower()
+            visible = bool(getattr(control, "Visible", True))
+            rect = getattr(control, "BoundingRectangle", None)
+            if control_type == "window" and visible and rect is not None:
+                intersects = (
+                    rect.right > left
+                    and rect.left < right
+                    and rect.bottom > top
+                    and rect.top < bottom
+                )
+                if intersects:
+                    windows.append(_control_to_info(control))
+            control = getattr(
+                control, "GetNextSiblingControl", lambda: None
+            )()
+    except Exception as exc:  # pragma: no cover
+        logger.debug("top-level window enumeration failed: %s", exc)
+        return None
+    return windows
+
+
 def _get_process_name(control: object) -> str | None:
     try:
         proc_id = getattr(control, "ProcessId", None)

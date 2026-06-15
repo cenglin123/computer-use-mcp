@@ -13,9 +13,11 @@ import logging
 import time
 from typing import Any
 
+import pyautogui
+
 from computer_use.core import click, get_coordinate_system, scroll, type_text
 from computer_use.safety import check_target_window, validate_coordinate, validate_text_input
-from computer_use.ui_automation import find_control
+from computer_use.ui_automation import find_control, inspect_point
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,15 @@ logger = logging.getLogger(__name__)
 MAX_OPEN_MENU_DEPTH: int = 20
 DEFAULT_MENU_INTERVAL: float = 0.3
 DEFAULT_SCROLL_INTERVAL: float = 0.3
+
+
+def _validate_current_scroll_target() -> None:
+    x, y = pyautogui.position()
+    cs = get_coordinate_system()
+    size = cs.get_screen_size()
+    validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
+    info = inspect_point(x, y)
+    check_target_window(info.process_name, info.class_name, info.control_type)
 
 
 def _safe_click(
@@ -278,6 +289,7 @@ def scroll_until(
                 },
             }
 
+        _validate_current_scroll_target()
         scroll(direction=normalized_direction, clicks=clicks)
         if interval > 0:
             time.sleep(interval)

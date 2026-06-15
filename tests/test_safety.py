@@ -130,7 +130,8 @@ def test_is_allowed_command_path_object(monkeypatch) -> None:
     config = load_config()
     config["safety"]["allowed_commands"] = ["C:/Program Files/App/app.exe"]
     assert is_allowed_command(Path("C:/Program Files/App/app.exe")) is True
-    assert is_allowed_command("app.exe") is True
+    assert is_allowed_command("D:/Other/app.exe") is False
+    assert is_allowed_command("app.exe") is False
     assert is_allowed_command("other.exe") is False
 
 

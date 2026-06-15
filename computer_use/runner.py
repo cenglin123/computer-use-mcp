@@ -15,9 +15,40 @@ from typing import Any
 from computer_use import snapshot, trace as trace_module
 from computer_use.config import load_config
 from computer_use.core import get_coordinate_system, save_screenshot
-from computer_use.mcp_server import _call_tool, _save_ui_snapshot
+from computer_use.mcp_server import (
+    _call_tool,
+    _failure_for_result,
+    _save_ui_snapshot,
+)
 
 logger = logging.getLogger(__name__)
+MAX_TASK_STEPS = 100
+
+
+def _validate_task_steps(steps: list[dict[str, Any]]) -> None:
+    expanded_steps = 0
+    for index, step in enumerate(steps):
+        tool_name = step.get("tool")
+        if not tool_name:
+            raise ValueError(f"step {index} is missing 'tool'")
+        if tool_name == "run_task_plan":
+            raise ValueError("Nested run_task_plan is not supported")
+
+        expanded_steps += 1
+        if tool_name == "batch":
+            actions = (step.get("args") or {}).get("actions") or []
+            for action in actions:
+                nested_tool = action.get("tool")
+                if nested_tool in {"batch", "run_task_plan"}:
+                    raise ValueError(
+                        f"Nested task tool {nested_tool!r} is not supported"
+                    )
+            expanded_steps += len(actions)
+
+    if expanded_steps > MAX_TASK_STEPS:
+        raise ValueError(
+            f"Task exceeds step budget of {MAX_TASK_STEPS} expanded steps"
+        )
 
 
 def _step_screenshot(trace_id: str, step_index: int | str, monitor: int = 1) -> str | None:
@@ -68,6 +99,7 @@ def run_task_plan(
     """
     if not steps:
         raise ValueError("steps must contain at least one entry")
+    _validate_task_steps(steps)
 
     trace_id = trace_id or trace_module.generate_trace_id()
     if goal is not None:
@@ -77,8 +109,6 @@ def run_task_plan(
 
     for i, step in enumerate(steps):
         tool_name = step.get("tool")
-        if not tool_name:
-            raise ValueError(f"step {i} is missing 'tool'")
         tool_args = step.get("args") or {}
         step_index = i + 1
 
@@ -110,7 +140,7 @@ def run_task_plan(
             entry["screenshot_path"] = screenshot_path
         results.append(entry)
 
-        if isinstance(result_data, dict) and "error" in result_data:
+        if _failure_for_result(result_data) is not None:
             failed_index = i
             break
 
@@ -172,6 +202,35 @@ def retry_step(
         }
 
     original = original_records[0]
+    if original.get("replayable") is False:
+        return {
+            "error": "retry_not_supported_for_redacted_step",
+            "trace_id": trace_id,
+            "step_index": step_index,
+        }
+    subsequent: list[dict[str, Any]] = []
+    if mode == "from_step":
+        subsequent = [
+            record
+            for record in records
+            if isinstance(record.get("step_index"), int)
+            and record["step_index"] > step_index
+            and record.get("tool") != "batch"
+        ]
+        non_replayable = next(
+            (
+                record
+                for record in subsequent
+                if record.get("replayable") is False
+            ),
+            None,
+        )
+        if non_replayable is not None:
+            return {
+                "error": "retry_not_supported_for_redacted_step",
+                "trace_id": trace_id,
+                "step_index": non_replayable["step_index"],
+            }
     tool_name = original["tool"]
     tool_args = original.get("args", {})
 
@@ -204,10 +263,6 @@ def retry_step(
     }
 
     if mode == "from_step":
-        subsequent = [
-            r for r in records
-            if isinstance(r.get("step_index"), int) and r["step_index"] > step_index and r.get("tool") != "batch"
-        ]
         subsequent_results: list[dict[str, Any]] = []
         for rec in subsequent:
             next_retry_count = sum(

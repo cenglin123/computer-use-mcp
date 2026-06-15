@@ -49,20 +49,11 @@ def _sensitive_window_classes() -> set[str]:
     return _SENSITIVE_WINDOW_CLASSES | {c.lower() for c in extra}
 
 
-def _allowed_commands() -> set[str]:
-    """Return the configured allowed command whitelist as lowercase strings.
-
-    Each entry contributes both its full normalized value and its basename so
-    that absolute-path whitelists also allow invocation by executable name.
-    """
+def _allowed_commands() -> list[str]:
+    """Return configured allowed commands as normalized strings."""
     config = load_config()
     commands = config.get("safety", {}).get("allowed_commands", [])
-    normalized: set[str] = set()
-    for cmd in commands:
-        value = str(cmd) if isinstance(cmd, Path) else cmd
-        normalized.add(_normalize_path(value))
-        normalized.add(_normalize_path(Path(value).name))
-    return normalized
+    return [_normalize_path(str(command)) for command in commands]
 
 
 def _normalize_path(value: str) -> str:
@@ -86,17 +77,23 @@ def is_allowed_command(command: str | Path) -> bool:
     else:
         command_str = command
 
-    lowered = _normalize_path(command_str)
-    basename = _normalize_path(Path(command_str).name)
-    if lowered in allowed or basename in allowed:
-        return True
-
-    try:
-        resolved = _normalize_path(str(Path(command_str).resolve()))
-        if resolved in allowed:
+    normalized_command = _normalize_path(command_str)
+    command_basename = _normalize_path(Path(command_str).name)
+    for allowed_command in allowed:
+        allowed_path = Path(allowed_command)
+        is_path_entry = "/" in allowed_command or "\\" in allowed_command
+        if is_path_entry:
+            if normalized_command == allowed_command:
+                return True
+            if allowed_path.is_absolute():
+                try:
+                    resolved = _normalize_path(str(Path(command_str).resolve()))
+                except Exception:  # pragma: no cover
+                    continue
+                if resolved == allowed_command:
+                    return True
+        elif command_basename == allowed_command:
             return True
-    except Exception:  # pragma: no cover
-        pass
 
     return False
 

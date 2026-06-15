@@ -88,3 +88,79 @@ def test_generate_report_creates_markdown(tmp_trace_dir: Path) -> None:
     assert "click" in text
     assert "find_control" in text
     assert "ui_not_found" in text
+
+
+@pytest.mark.parametrize(
+    "trace_id",
+    [
+        "../escape",
+        "nested/trace",
+        r"nested\trace",
+        r"C:\absolute",
+        "CON",
+        "com1",
+        "trailing.",
+        "contains space",
+        "x" * 129,
+    ],
+)
+def test_trace_entrypoints_reject_invalid_trace_ids(
+    tmp_trace_dir: Path, trace_id: str
+) -> None:
+    with pytest.raises(ValueError, match="trace_id"):
+        trace.trace_root(trace_id)
+    with pytest.raises(ValueError, match="trace_id"):
+        trace.write_trace_meta(trace_id)
+    with pytest.raises(ValueError, match="trace_id"):
+        trace.read_trace_meta(trace_id)
+    with pytest.raises(ValueError, match="trace_id"):
+        trace.read_trace(trace_id)
+
+
+def test_record_step_recursively_redacts_input_values(
+    tmp_trace_dir: Path,
+) -> None:
+    trace.record_step(
+        trace_id="redaction-001",
+        step_index=1,
+        tool="run_task_plan",
+        args={
+            "steps": [
+                {"tool": "type", "args": {"text": "top-secret"}},
+                {
+                    "tool": "batch",
+                    "args": {
+                        "actions": [
+                            {
+                                "tool": "fill_form",
+                                "args": {
+                                    "fields": [
+                                        {
+                                            "name": "Password",
+                                            "value": "nested-secret",
+                                        }
+                                    ]
+                                },
+                            }
+                        ]
+                    },
+                },
+            ]
+        },
+        result={
+            "error": "failed while handling top-secret and nested-secret"
+        },
+    )
+
+    record = trace.read_trace("redaction-001")[0]
+    serialized = str(record)
+    assert "top-secret" not in serialized
+    assert "nested-secret" not in serialized
+    assert record["replayable"] is False
+    assert record["args"]["steps"][0]["args"]["text"] == {
+        "redacted": True,
+        "length": 10,
+    }
+    assert record["args"]["steps"][1]["args"]["actions"][0]["args"][
+        "fields"
+    ][0]["name"] == "Password"

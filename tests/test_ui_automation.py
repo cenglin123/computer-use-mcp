@@ -361,3 +361,56 @@ def test_inspect_point_uia_unavailable() -> None:
     info = uia_mod.inspect_point(0, 0)
     assert info.name is None
     assert info.control_type is None
+
+
+def test_get_top_level_windows_in_rect_filters_visibility_and_intersection() -> None:
+    root = _FakeControl(
+        name="Desktop",
+        control_type_name="Pane",
+        children=[
+            _FakeControl(
+                name="Inside",
+                control_type_name="Window",
+                rect=_FakeRect(10, 10, 100, 100),
+            ),
+            _FakeControl(
+                name="Outside",
+                control_type_name="Window",
+                rect=_FakeRect(500, 500, 600, 600),
+            ),
+            _FakeControl(
+                name="Hidden",
+                control_type_name="Window",
+                rect=_FakeRect(20, 20, 80, 80),
+                visible=False,
+            ),
+            _FakeControl(
+                name="ChildPane",
+                control_type_name="Pane",
+                class_name="#32770",
+                rect=_FakeRect(20, 20, 80, 80),
+            ),
+        ],
+    )
+    uia_mod.uia = MagicMock()
+    uia_mod.uia.GetRootControl.return_value = root
+
+    windows = uia_mod.get_top_level_windows_in_rect((0, 0, 200, 200))
+
+    assert windows is not None
+    assert [window.name for window in windows] == ["Inside"]
+
+
+def test_get_top_level_windows_in_rect_returns_none_when_uia_unavailable() -> None:
+    uia_mod.uia = None
+
+    assert uia_mod.get_top_level_windows_in_rect((0, 0, 200, 200)) is None
+
+
+def test_get_top_level_windows_in_rect_returns_none_on_enumeration_error() -> None:
+    root = MagicMock()
+    root.GetFirstChildControl.side_effect = RuntimeError("uia failure")
+    uia_mod.uia = MagicMock()
+    uia_mod.uia.GetRootControl.return_value = root
+
+    assert uia_mod.get_top_level_windows_in_rect((0, 0, 200, 200)) is None

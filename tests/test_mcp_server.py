@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -80,11 +81,18 @@ def _minimal_config(tmpdir: str, screenshot_sensitive_window_check: bool = False
     }
 
 
+def _fake_save_screenshot(path: str | Path, monitor: int) -> Path:
+    saved = Path(path)
+    saved.write_bytes(b"fake-png")
+    return saved
+
+
 def test_screenshot_default_saves_to_configured_dir(monkeypatch) -> None:
     import computer_use.mcp_server as server
 
     with tempfile.TemporaryDirectory() as tmpdir:
         monkeypatch.setattr(server, "load_config", lambda: _minimal_config(tmpdir))
+        monkeypatch.setattr(server, "save_screenshot", _fake_save_screenshot)
         result = _call_tool("screenshot", {})
         data = json.loads(result)
         assert data["screenshot_taken"] is True
@@ -101,6 +109,7 @@ def test_screenshot_with_monitor(monkeypatch) -> None:
 
     with tempfile.TemporaryDirectory() as tmpdir:
         monkeypatch.setattr(server, "load_config", lambda: _minimal_config(tmpdir))
+        monkeypatch.setattr(server, "save_screenshot", _fake_save_screenshot)
         result = _call_tool("screenshot", {"monitor": 1})
         data = json.loads(result)
         assert data["screenshot_taken"] is True
@@ -115,9 +124,16 @@ def test_screenshot_invalid_monitor() -> None:
     assert "error" in data or "out of range" in result
 
 
-def test_screenshot_save_path_returns_path() -> None:
+def test_screenshot_save_path_returns_path(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
     with tempfile.TemporaryDirectory() as tmpdir:
-        path = Path(tmpdir) / "shot.png"
+        config = _minimal_config(tmpdir)
+        screenshot_dir = Path(config["screenshot_dir"])
+        screenshot_dir.mkdir()
+        path = screenshot_dir / "shot.png"
+        monkeypatch.setattr(server, "load_config", lambda: config)
+        monkeypatch.setattr(server, "save_screenshot", _fake_save_screenshot)
         result = _call_tool("screenshot", {"save_path": str(path)})
         data = json.loads(result)
         assert data["screenshot_taken"] is True
@@ -128,11 +144,72 @@ def test_screenshot_save_path_returns_path() -> None:
         assert "timestamp" in data
 
 
-def test_screenshot_save_path_parent_missing() -> None:
-    result = _call_tool("screenshot", {"save_path": "C:/nonexistent_dir/shot.png"})
-    data = json.loads(result)
-    assert "error" in data
-    assert "Directory does not exist" in data["error"] or "Failed to save" in data["error"]
+def test_screenshot_save_path_outside_configured_dir_is_rejected(
+    monkeypatch,
+) -> None:
+    import computer_use.mcp_server as server
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config = _minimal_config(tmpdir)
+        Path(config["screenshot_dir"]).mkdir()
+        path = Path(tmpdir) / "outside.png"
+        monkeypatch.setattr(server, "load_config", lambda: config)
+        monkeypatch.setattr(server, "save_screenshot", _fake_save_screenshot)
+
+        result = _call_tool("screenshot", {"save_path": str(path)})
+
+        data = json.loads(result)
+        assert "error" in data
+        assert "screenshot_dir" in data["error"]
+        assert not path.exists()
+
+
+@pytest.mark.parametrize(
+    "path_factory",
+    [
+        lambda root, shots: shots,
+        lambda root, shots: shots / ".." / "escape.png",
+        lambda root, shots: Path(r"\\server\share\shot.png"),
+        lambda root, shots: Path("C:drive-relative.png"),
+    ],
+    ids=["directory", "parent-traversal", "unc", "drive-relative"],
+)
+def test_screenshot_save_path_rejects_path_edge_cases(
+    monkeypatch, path_factory
+) -> None:
+    import computer_use.mcp_server as server
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config = _minimal_config(tmpdir)
+        shots = Path(config["screenshot_dir"])
+        shots.mkdir()
+        path = path_factory(Path(tmpdir), shots)
+        monkeypatch.setattr(server, "load_config", lambda: config)
+        monkeypatch.setattr(server, "save_screenshot", _fake_save_screenshot)
+
+        data = json.loads(
+            _call_tool("screenshot", {"save_path": str(path)})
+        )
+
+        assert "error" in data
+        assert "screenshot_dir" in data["error"]
+
+
+@pytest.mark.manual
+@pytest.mark.skipif(
+    os.environ.get("COMPUTER_USE_RUN_MANUAL") != "1",
+    reason="requires an interactive Windows desktop",
+)
+def test_manual_real_screenshot_capture(monkeypatch, tmp_path) -> None:
+    import computer_use.mcp_server as server
+
+    config = _minimal_config(str(tmp_path))
+    monkeypatch.setattr(server, "load_config", lambda: config)
+
+    data = json.loads(_call_tool("screenshot", {"monitor": 1}))
+
+    assert data["screenshot_taken"] is True
+    assert Path(data["saved_path"]).is_file()
 
 
 def test_type_blocks_dangerous() -> None:
@@ -468,6 +545,32 @@ def test_batch_tool_continue_on_error(monkeypatch) -> None:
     assert "final_screenshot" not in data
 
 
+def test_batch_tool_stops_on_timeout(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
+    def fake_call_tool(name, args, trace_context=None):
+        if name == "wait_for_window":
+            return json.dumps({"present": False, "timeout": True})
+        return json.dumps({"called": name})
+
+    monkeypatch.setattr(server, "_call_tool", fake_call_tool)
+
+    data = json.loads(
+        _call_tool(
+            "batch",
+            {
+                "actions": [
+                    {"tool": "wait_for_window", "args": {"name": "Missing"}},
+                    {"tool": "sleep", "args": {"duration": 0}},
+                ]
+            },
+        )
+    )
+
+    assert data["failed_index"] == 0
+    assert len(data["results"]) == 1
+
+
 def test_batch_tool_rejects_nested_batch(monkeypatch) -> None:
     import computer_use.mcp_server as server
 
@@ -492,6 +595,32 @@ def test_batch_tool_rejects_nested_batch(monkeypatch) -> None:
     assert "error" in data["results"][0]
     assert calls == []
     assert "final_screenshot" not in data
+
+
+def test_batch_tool_rejects_run_task_plan_with_nested_batch() -> None:
+    data = json.loads(
+        _call_tool(
+            "batch",
+            {
+                "actions": [
+                    {
+                        "tool": "run_task_plan",
+                        "args": {
+                            "steps": [
+                                {
+                                    "tool": "batch",
+                                    "args": {"actions": []},
+                                }
+                            ]
+                        },
+                    }
+                ]
+            },
+        )
+    )
+
+    assert data["failed_index"] == 0
+    assert "run_task_plan" in json.dumps(data)
 
 
 class TestLowLevelInputTools:
@@ -553,14 +682,160 @@ class TestLowLevelInputTools:
 
     def test_scroll_direction(self, monkeypatch) -> None:
         import computer_use.mcp_server as server
+        from computer_use.ui_automation import ControlInfo
 
         calls = []
+        checks = []
+        monkeypatch.setattr(server.pyautogui, "position", lambda: (321, 432))
+        monkeypatch.setattr(
+            server,
+            "inspect_point",
+            lambda x, y: ControlInfo(
+                name="List",
+                control_type="Pane",
+                class_name="SafePane",
+                process_name="safe.exe",
+                is_password=False,
+                rect=None,
+                center=None,
+            ),
+        )
+        monkeypatch.setattr(
+            server,
+            "check_target_window",
+            lambda process, class_name, control_type: checks.append(
+                (process, class_name, control_type)
+            ),
+        )
         monkeypatch.setattr(server, "scroll", lambda amount, x, y, direction, clicks: calls.append((amount, x, y, direction, clicks)))
 
         result = _call_tool("scroll", {"direction": "down", "clicks": 2})
         data = json.loads(result)
         assert data["scrolled"] is True
         assert calls == [(None, None, None, "down", 2)]
+        assert checks == [("safe.exe", "SafePane", "Pane")]
+
+    def test_scroll_without_coords_rejects_out_of_bounds_cursor(
+        self, monkeypatch
+    ) -> None:
+        import computer_use.mcp_server as server
+
+        calls = []
+        monkeypatch.setattr(server.pyautogui, "position", lambda: (-100, 100))
+        monkeypatch.setattr(
+            server,
+            "scroll",
+            lambda **kwargs: calls.append(kwargs),
+        )
+
+        data = json.loads(
+            _call_tool("scroll", {"direction": "down", "clicks": 1})
+        )
+
+        assert "error" in data
+        assert calls == []
+
+
+def test_screenshot_redacts_when_sensitive_top_level_window_intersects(
+    monkeypatch,
+) -> None:
+    import computer_use.mcp_server as server
+    from computer_use.ui_automation import ControlInfo
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config = _minimal_config(tmpdir, screenshot_sensitive_window_check=True)
+        redacted_calls = []
+        monkeypatch.setattr(server, "load_config", lambda: config)
+        monkeypatch.setattr(
+            server,
+            "get_top_level_windows_in_rect",
+            lambda bounds: [
+                ControlInfo(
+                    name="Secrets",
+                    control_type="Window",
+                    class_name="SafeWindow",
+                    process_name="keepass.exe",
+                    is_password=False,
+                    rect=(10, 10, 200, 200),
+                    center=(105, 105),
+                )
+            ],
+        )
+        monkeypatch.setattr(
+            server,
+            "save_redacted_image",
+            lambda path, width, height: redacted_calls.append(
+                (path, width, height)
+            )
+            or _fake_save_screenshot(path, 1),
+        )
+
+        data = json.loads(_call_tool("screenshot", {"monitor": 1}))
+
+        assert data["redacted"] is True
+        assert len(redacted_calls) == 1
+
+
+def test_screenshot_monitor_zero_falls_back_to_offset_center(
+    monkeypatch, tmp_path
+) -> None:
+    import computer_use.mcp_server as server
+    from types import SimpleNamespace
+    from computer_use.safety import SafetyError
+    from computer_use.ui_automation import ControlInfo
+
+    config = _minimal_config(
+        str(tmp_path), screenshot_sensitive_window_check=True
+    )
+    fake_cs = SimpleNamespace(
+        virtual_left=-200,
+        virtual_top=20,
+        virtual_width=2120,
+        virtual_height=1060,
+        monitors=[
+            {"left": 0, "top": 20, "width": 1920, "height": 1060},
+        ],
+        get_monitors=lambda: [SimpleNamespace(index=1)],
+    )
+    inspected = []
+    bounds_seen = []
+    monkeypatch.setattr(server, "load_config", lambda: config)
+    monkeypatch.setattr(server, "get_coordinate_system", lambda: fake_cs)
+    monkeypatch.setattr(
+        server,
+        "get_top_level_windows_in_rect",
+        lambda bounds: bounds_seen.append(bounds) or None,
+    )
+    monkeypatch.setattr(
+        server,
+        "inspect_point",
+        lambda x, y: inspected.append((x, y))
+        or ControlInfo(
+            name="Sensitive",
+            control_type="Window",
+            class_name="SafeWindow",
+            process_name="keepass.exe",
+            is_password=False,
+            rect=None,
+            center=None,
+        ),
+    )
+    monkeypatch.setattr(
+        server,
+        "check_target_window",
+        lambda *args: (_ for _ in ()).throw(SafetyError("blocked")),
+    )
+    monkeypatch.setattr(
+        server,
+        "save_redacted_image",
+        lambda path, width, height: _fake_save_screenshot(path, 0),
+    )
+
+    data = json.loads(_call_tool("screenshot", {"monitor": 0}))
+
+    assert bounds_seen == [(-200, 20, 1920, 1080)]
+    assert inspected == [(860, 550)]
+    assert data["redacted"] is True
 
     def test_key_down_up_and_press(self, monkeypatch) -> None:
         import computer_use.mcp_server as server
@@ -1019,3 +1294,144 @@ def test_batch_substeps_namespaced_under_run_task_plan(monkeypatch, tmp_path):
     indices = [r["step_index"] for r in records]
     assert set(indices) == {1, "1.1", "1.2"}
     assert indices[-1] == 1
+
+
+def test_mcp_run_task_plan_uses_single_trace(monkeypatch, tmp_path):
+    import computer_use.mcp_server as server
+    import computer_use.trace as trace_module
+
+    monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path)
+    monkeypatch.setattr(server.time, "sleep", lambda duration: None)
+
+    data = json.loads(
+        _call_tool(
+            "run_task_plan",
+            {
+                "steps": [{"tool": "sleep", "args": {"duration": 0}}],
+                "capture_screenshots": False,
+            },
+        )
+    )
+
+    trace_dirs = [path for path in tmp_path.iterdir() if path.is_dir()]
+    assert len(trace_dirs) == 1
+    assert trace_dirs[0].name == data["trace_id"]
+    records = trace_module.read_trace(data["trace_id"])
+    assert [record["tool"] for record in records] == ["sleep"]
+
+
+def test_mcp_run_task_plan_with_explicit_id_uses_single_trace(
+    monkeypatch, tmp_path
+) -> None:
+    import computer_use.mcp_server as server
+    import computer_use.trace as trace_module
+
+    monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path)
+    monkeypatch.setattr(server.time, "sleep", lambda duration: None)
+
+    data = json.loads(
+        _call_tool(
+            "run_task_plan",
+            {
+                "trace_id": "explicit-trace",
+                "steps": [{"tool": "sleep", "args": {"duration": 0}}],
+                "capture_screenshots": False,
+            },
+        )
+    )
+
+    trace_dirs = [path for path in tmp_path.iterdir() if path.is_dir()]
+    assert data["trace_id"] == "explicit-trace"
+    assert [path.name for path in trace_dirs] == ["explicit-trace"]
+
+
+def test_tool_logging_redacts_nested_input_values(
+    monkeypatch, caplog
+) -> None:
+    import computer_use.mcp_server as server
+
+    monkeypatch.setattr(
+        server,
+        "_dispatch_tool",
+        lambda *args, **kwargs: json.dumps({"typed": True}),
+    )
+    caplog.set_level("INFO")
+
+    _call_tool(
+        "batch",
+        {
+            "actions": [
+                {"tool": "type", "args": {"text": "log-secret"}},
+            ]
+        },
+    )
+
+    assert "log-secret" not in caplog.text
+    assert "redacted" in caplog.text
+
+
+def test_exception_logging_redacts_input_values(
+    monkeypatch, caplog
+) -> None:
+    import computer_use.mcp_server as server
+
+    monkeypatch.setattr(
+        server,
+        "_dispatch_tool",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("failed with exception-secret")
+        ),
+    )
+    caplog.set_level("ERROR")
+
+    with pytest.raises(RuntimeError):
+        _call_tool("type", {"text": "exception-secret"})
+
+    assert "exception-secret" not in caplog.text
+
+
+def test_outer_tool_handler_redacts_exception_response_and_log(
+    monkeypatch, caplog
+) -> None:
+    import computer_use.mcp_server as server
+
+    monkeypatch.setattr(
+        server,
+        "_call_tool",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("failed with outer-secret")
+        ),
+    )
+    caplog.set_level("ERROR")
+
+    result = server._handle_tool_call(
+        "type", {"text": "outer-secret"}
+    )
+
+    assert "outer-secret" not in result
+    assert "outer-secret" not in caplog.text
+    assert "<redacted>" in result
+
+
+def test_fail_safe_returns_structured_error_and_trace(
+    monkeypatch, tmp_path
+) -> None:
+    import computer_use.mcp_server as server
+    import computer_use.trace as trace_module
+    import pyautogui
+
+    monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        server,
+        "_dispatch_tool",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            pyautogui.FailSafeException("cursor corner")
+        ),
+    )
+
+    data = json.loads(_call_tool("click", {"x": 10, "y": 10}))
+
+    assert data["error"] == "fail_safe"
+    trace_id = next(path.name for path in tmp_path.iterdir() if path.is_dir())
+    record = trace_module.read_trace(trace_id)[0]
+    assert record["error_kind"] == "fail_safe"

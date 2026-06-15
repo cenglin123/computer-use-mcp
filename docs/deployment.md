@@ -7,7 +7,7 @@
 | 变量 | 用途 | 必填 | 备注 |
 |------|------|------|------|
 | `PYTHONUTF8` | 强制 Python UTF-8 模式 | ❌ | Windows 中文环境下建议设为 `1`，避免终端乱码 |
-| `COMPUTER_USE_CONFIG` | 覆盖默认配置文件路径 | ❌ | 默认读取项目根 `config.yaml` |
+| `COMPUTER_USE_CONFIG` | 覆盖默认配置文件路径 | ❌ | 显式代码参数优先；否则读取该变量；最后回退到 `~/.kimi-code/mcp/computer-use/config.yaml` |
 
 ## 启动方式
 
@@ -44,7 +44,8 @@ python -m computer_use click 100 100
 
 ## 持久化与备份
 
-- 本项目无持久化数据库，截图均通过内存返回 base64。
+- 本项目无持久化数据库。截图保存到配置的 `screenshot_dir`，MCP 响应只返回本地路径，不返回 base64。
+- `screenshot.save_path` 只能指向 `screenshot_dir` 内已存在的父目录，不能写入任意文件系统位置。
 - `config.yaml` 若包含敏感配置，应通过环境变量或本地 `.env` 覆盖，不要提交到版本库。
 
 ## 部署陷阱

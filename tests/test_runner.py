@@ -71,6 +71,79 @@ def test_run_task_plan_stops_on_error(monkeypatch, tmp_path) -> None:
     assert len(result["results"]) == 1
 
 
+def test_run_task_plan_stops_on_timeout_and_records_failure(
+    monkeypatch, tmp_path
+) -> None:
+    import computer_use.mcp_server as server
+    from computer_use import review as review_mod
+
+    monkeypatch.setattr(
+        server,
+        "_dispatch_tool",
+        lambda *args, **kwargs: json.dumps(
+            {"present": False, "timeout": True}
+        ),
+    )
+
+    result = runner_mod.run_task_plan(
+        steps=[
+            {"tool": "wait_for_window", "args": {"name": "Missing"}},
+            {"tool": "sleep", "args": {"duration": 0}},
+        ],
+        trace_id="task-timeout",
+        capture_screenshots=False,
+    )
+
+    assert result["failed_index"] == 0
+    assert len(result["results"]) == 1
+    records = trace_module.read_trace("task-timeout")
+    assert records[0]["error_kind"] == "timeout"
+    review = review_mod.review_task("task-timeout")
+    assert review["error_distribution"] == {"timeout": 1}
+    assert "timeout" in Path(result["report_path"]).read_text(encoding="utf-8")
+
+
+def test_run_task_plan_stops_when_nested_batch_fails(
+    monkeypatch,
+) -> None:
+    import computer_use.mcp_server as server
+
+    monkeypatch.setattr(
+        server,
+        "_dispatch_tool",
+        lambda *args, **kwargs: json.dumps(
+            {
+                "results": [
+                    {
+                        "index": 0,
+                        "tool": "wait_for_window",
+                        "result": {"present": False, "timeout": True},
+                    }
+                ],
+                "failed_index": 0,
+            }
+        ),
+    )
+
+    result = runner_mod.run_task_plan(
+        steps=[
+            {"tool": "batch", "args": {"actions": []}},
+            {"tool": "sleep", "args": {"duration": 0}},
+        ],
+        trace_id="task-batch-timeout",
+        capture_screenshots=False,
+    )
+
+    assert result["failed_index"] == 0
+    assert len(result["results"]) == 1
+    records = trace_module.read_trace("task-batch-timeout")
+    assert records[0]["error_kind"] == "timeout"
+    from computer_use import review as review_mod
+
+    review = review_mod.review_task("task-batch-timeout")
+    assert review["error_distribution"] == {"timeout": 1}
+
+
 def test_run_task_plan_requires_steps() -> None:
     with pytest.raises(ValueError, match="steps must contain"):
         runner_mod.run_task_plan(steps=[])
@@ -131,9 +204,9 @@ def test_retry_step_from_step_replays_subsequent(monkeypatch, tmp_path) -> None:
     trace_module.record_step(
         trace_id="retry-002",
         step_index=2,
-        tool="type",
-        args={"text": "hello"},
-        result={"typed": True},
+        tool="click",
+        args={"x": 300, "y": 400},
+        result={"clicked": True},
     )
 
     result = runner_mod.retry_step("retry-002", step_index=1, mode="from_step")
@@ -159,6 +232,60 @@ def test_retry_step_missing_step() -> None:
     )
     result = runner_mod.retry_step("retry-003", step_index=99)
     assert result["error"] == "step_not_found"
+
+
+def test_retry_step_rejects_redacted_non_replayable_step(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        runner_mod,
+        "_call_tool",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    trace_module.record_step(
+        trace_id="retry-redacted",
+        step_index=1,
+        tool="type",
+        args={"text": "secret"},
+        result={"typed": True},
+    )
+
+    result = runner_mod.retry_step("retry-redacted", step_index=1)
+
+    assert result["error"] == "retry_not_supported_for_redacted_step"
+    assert calls == []
+
+
+def test_retry_from_step_rejects_redacted_subsequent_step(
+    monkeypatch,
+) -> None:
+    calls = []
+    monkeypatch.setattr(
+        runner_mod,
+        "_call_tool",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    trace_module.record_step(
+        trace_id="retry-redacted-tail",
+        step_index=1,
+        tool="click",
+        args={"x": 10, "y": 20},
+        result={"clicked": True},
+    )
+    trace_module.record_step(
+        trace_id="retry-redacted-tail",
+        step_index=2,
+        tool="type",
+        args={"text": "secret"},
+        result={"typed": True},
+    )
+
+    result = runner_mod.retry_step(
+        "retry-redacted-tail", step_index=1, mode="from_step"
+    )
+
+    assert result["error"] == "retry_not_supported_for_redacted_step"
+    assert result["step_index"] == 2
+    assert calls == []
 
 
 def test_run_task_plan_no_duplicate_step_index_for_screenshot(monkeypatch, tmp_path) -> None:
@@ -204,3 +331,82 @@ def test_run_task_plan_writes_goal_meta(monkeypatch, tmp_path) -> None:
 
     meta = trace_module.read_trace_meta("task-goal")
     assert meta.get("goal") == "open settings"
+
+
+def test_run_task_plan_rejects_nested_run_task_plan() -> None:
+    with pytest.raises(ValueError, match="run_task_plan"):
+        runner_mod.run_task_plan(
+            steps=[
+                {
+                    "tool": "run_task_plan",
+                    "args": {
+                        "steps": [
+                            {"tool": "sleep", "args": {"duration": 0}},
+                        ]
+                    },
+                }
+            ],
+            capture_screenshots=False,
+        )
+
+
+def test_run_task_plan_rejects_run_task_plan_inside_batch() -> None:
+    with pytest.raises(ValueError, match="run_task_plan"):
+        runner_mod.run_task_plan(
+            steps=[
+                {
+                    "tool": "batch",
+                    "args": {
+                        "actions": [
+                            {
+                                "tool": "run_task_plan",
+                                "args": {
+                                    "steps": [
+                                        {
+                                            "tool": "sleep",
+                                            "args": {"duration": 0},
+                                        }
+                                    ]
+                                },
+                            }
+                        ]
+                    },
+                }
+            ],
+            capture_screenshots=False,
+        )
+
+
+def test_run_task_plan_rejects_expanded_step_budget() -> None:
+    with pytest.raises(ValueError, match="step budget"):
+        runner_mod.run_task_plan(
+            steps=[
+                {"tool": "sleep", "args": {"duration": 0}}
+                for _ in range(runner_mod.MAX_TASK_STEPS + 1)
+            ],
+            capture_screenshots=False,
+        )
+
+
+def test_run_task_plan_fail_safe_generates_report(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+    import pyautogui
+
+    monkeypatch.setattr(
+        server,
+        "_dispatch_tool",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            pyautogui.FailSafeException("cursor corner")
+        ),
+    )
+
+    result = runner_mod.run_task_plan(
+        steps=[{"tool": "click", "args": {"x": 10, "y": 10}}],
+        trace_id="task-fail-safe",
+        capture_screenshots=False,
+    )
+
+    assert result["failed_index"] == 0
+    assert Path(result["report_path"]).exists()
+    records = trace_module.read_trace("task-fail-safe")
+    assert records[0]["error_kind"] == "fail_safe"

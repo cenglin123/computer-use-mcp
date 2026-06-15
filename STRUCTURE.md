@@ -8,6 +8,11 @@
 | MCP 工具约定 | [docs/api.md](docs/api.md) |
 | 部署与配置 | [docs/deployment.md](docs/deployment.md) |
 | 已知环境陷阱 | [docs/pitfalls.md](docs/pitfalls.md) |
+| 配置与命令白名单修复 | [docs/problems/bugfix/config-command-allowlist.md](docs/problems/bugfix/config-command-allowlist.md) |
+| 受控路径边界修复 | [docs/problems/bugfix/controlled-path-boundaries.md](docs/problems/bugfix/controlled-path-boundaries.md) |
+| 输入与截图安全修复 | [docs/problems/bugfix/input-screenshot-safety.md](docs/problems/bugfix/input-screenshot-safety.md) |
+| 任务调度与 trace 修复 | [docs/problems/bugfix/task-dispatch-trace-semantics.md](docs/problems/bugfix/task-dispatch-trace-semantics.md) |
+| trace 脱敏与 fail-safe 修复 | [docs/problems/bugfix/trace-redaction-failsafe.md](docs/problems/bugfix/trace-redaction-failsafe.md) |
 | 文档一致性审计 | [docs/audit-checklist.md](docs/audit-checklist.md) |
 | 审计日志 | [docs/audit-log.md](docs/audit-log.md) |
 | 当前任务状态 | [docs/CURRENT.md](docs/CURRENT.md) |

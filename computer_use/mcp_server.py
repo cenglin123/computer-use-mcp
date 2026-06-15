@@ -50,6 +50,7 @@ from computer_use.safety import (
 )
 from computer_use.ui_automation import (
     find_control,
+    get_top_level_windows_in_rect,
     inspect_point,
     wait_for_control,
     wait_for_window,
@@ -609,9 +610,43 @@ def _error_kind_for_result(error_value: Any) -> str:
     return "unknown"
 
 
+def _failure_for_result(result: Any) -> tuple[str, str] | None:
+    """Return ``(error_kind, message)`` for a structured failed result."""
+    if not isinstance(result, dict):
+        return None
+    if result.get("error"):
+        message = str(result["error"])
+        return _error_kind_for_result(result["error"]), message
+    if result.get("timeout") is True:
+        return "timeout", "timeout"
+    if result.get("failed_index") is not None:
+        failed_index = result["failed_index"]
+        results = result.get("results")
+        if (
+            isinstance(failed_index, int)
+            and isinstance(results, list)
+            and 0 <= failed_index < len(results)
+            and isinstance(results[failed_index], dict)
+        ):
+            failed_entry = results[failed_index]
+            nested_result = failed_entry.get("result", failed_entry)
+            nested_failure = _failure_for_result(nested_result)
+            if nested_failure is not None:
+                return nested_failure
+        return "unknown", "nested task failed"
+    return None
+
+
 def _call_tool(name: str, args: dict, trace_context: dict[str, Any] | None = None) -> str:
-    logging.info("tool=%s args=%s", name, args)
-    trace_id = trace_context["trace_id"] if trace_context else trace_module.generate_trace_id()
+    logging.info(
+        "tool=%s args=%s", name, trace_module.sanitize_for_logging(args)
+    )
+    if trace_context:
+        trace_id = trace_context["trace_id"]
+    elif name == "run_task_plan" and args.get("trace_id"):
+        trace_id = args["trace_id"]
+    else:
+        trace_id = trace_module.generate_trace_id()
     step_index = trace_context["step_index"] if trace_context else 0
     screenshot_path = trace_context.get("screenshot_path") if trace_context else None
     start = time.perf_counter()
@@ -628,8 +663,16 @@ def _call_tool(name: str, args: dict, trace_context: dict[str, Any] | None = Non
         logging.warning("validation block: %s", exc)
         payload = json.dumps({"error": str(exc)})
         error = exc
+    except pyautogui.FailSafeException as exc:
+        logging.warning("pyautogui fail-safe: %s", exc)
+        payload = json.dumps(
+            {"error": "fail_safe", "detail": "PyAutoGUI fail-safe triggered"}
+        )
     except Exception as exc:
-        logging.exception("tool error")
+        logging.error(
+            "tool error: %s",
+            trace_module.sanitize_message(args, str(exc)),
+        )
         error = exc
     finally:
         duration_ms = int((time.perf_counter() - start) * 1000)
@@ -651,24 +694,32 @@ def _call_tool(name: str, args: dict, trace_context: dict[str, Any] | None = Non
         if error is not None:
             error_kind = "safety_block" if isinstance(error, SafetyError) else "unknown"
             error_message = str(error)
-        elif isinstance(result_data, dict) and result_data.get("error"):
-            error_message = str(result_data["error"])
-            error_kind = _error_kind_for_result(result_data["error"])
+        else:
+            failure = _failure_for_result(result_data)
+            if failure is not None:
+                error_kind, error_message = failure
 
-        try:
-            trace_module.record_step(
-                trace_id=trace_id,
-                step_index=step_index,
-                tool=name,
-                args=args,
-                result=result_data,
-                duration_ms=duration_ms,
-                screenshot_path=screenshot_path,
-                error_kind=error_kind,
-                error_message=error_message,
-            )
-        except Exception as exc:
-            logging.warning("trace record failed: %s", exc)
+        task_runner_owns_trace = (
+            name == "run_task_plan"
+            and error is None
+            and isinstance(result_data, dict)
+            and result_data.get("trace_id") == trace_id
+        )
+        if not task_runner_owns_trace:
+            try:
+                trace_module.record_step(
+                    trace_id=trace_id,
+                    step_index=step_index,
+                    tool=name,
+                    args=args,
+                    result=result_data,
+                    duration_ms=duration_ms,
+                    screenshot_path=screenshot_path,
+                    error_kind=error_kind,
+                    error_message=error_message,
+                )
+            except Exception as exc:
+                logging.warning("trace record failed: %s", exc)
 
         if error is not None and not isinstance(error, (SafetyError, ValueError)):
             raise error
@@ -700,38 +751,58 @@ def _dispatch_tool(
 
     if name == "screenshot":
         config = load_config()
+        screenshot_dir = Path(config["screenshot_dir"]).resolve()
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
         monitor = args.get("monitor", config.get("display", {}).get("default_monitor", 0))
         monitors = cs.get_monitors()
         validate_monitor_index(monitor, len(monitors))
 
         if monitor == 0:
             width, height = cs.virtual_width, cs.virtual_height
+            capture_left, capture_top = cs.virtual_left, cs.virtual_top
         else:
             mon = cs.monitors[monitor - 1]
             width, height = mon["width"], mon["height"]
+            capture_left, capture_top = mon["left"], mon["top"]
 
         save_path = args.get("save_path")
+        if save_path:
+            requested_path = Path(save_path).resolve()
+            if requested_path == screenshot_dir or screenshot_dir not in requested_path.parents:
+                raise SafetyError(
+                    "Screenshot save_path must be inside configured screenshot_dir"
+                )
+            if not requested_path.parent.is_dir():
+                raise SafetyError("Screenshot save_path parent directory does not exist")
+            save_path = str(requested_path)
 
         sensitive = False
         if config["safety"]["screenshot_sensitive_window_check"]:
-            if monitor == 0:
-                cx, cy = width // 2, height // 2
-            else:
-                mon = cs.monitors[monitor - 1]
-                cx = mon["left"] + width // 2
-                cy = mon["top"] + height // 2
-            info = inspect_point(cx, cy)
-            try:
-                check_target_window(
-                    info.process_name, info.class_name, info.control_type
-                )
-            except SafetyError as exc:
-                logging.warning("screenshot sensitive window: %s", exc)
-                sensitive = True
+            bounds = (
+                capture_left,
+                capture_top,
+                capture_left + width,
+                capture_top + height,
+            )
+            windows = get_top_level_windows_in_rect(bounds)
+            if windows is None:
+                windows = [
+                    inspect_point(
+                        capture_left + width // 2,
+                        capture_top + height // 2,
+                    )
+                ]
+            for info in windows:
+                try:
+                    check_target_window(
+                        info.process_name, info.class_name, info.control_type
+                    )
+                except SafetyError as exc:
+                    logging.warning("screenshot sensitive window: %s", exc)
+                    sensitive = True
+                    break
 
         if not save_path:
-            screenshot_dir = Path(config["screenshot_dir"])
-            screenshot_dir.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now(timezone.utc)
             filename = timestamp.strftime("%Y%m%dT%H%M%S_%f")[:-3]
             save_path = str(screenshot_dir / f"screenshot_{filename}_m{monitor}.png")
@@ -789,6 +860,20 @@ def _dispatch_tool(
             size = cs.get_screen_size()
             validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
             info = inspect_point(x, y)
+            check_target_window(
+                info.process_name, info.class_name, info.control_type
+            )
+        else:
+            current_x, current_y = _current_logical_position()
+            size = cs.get_screen_size()
+            validate_coordinate(
+                current_x,
+                current_y,
+                size.width,
+                size.height,
+                monitors=cs.monitors,
+            )
+            info = inspect_point(current_x, current_y)
             check_target_window(
                 info.process_name, info.class_name, info.control_type
             )
@@ -1017,7 +1102,7 @@ def _dispatch_tool(
         from computer_use import runner
         result = runner.run_task_plan(
             steps=args["steps"],
-            trace_id=args.get("trace_id"),
+            trace_id=args.get("trace_id") or trace_id,
             goal=args.get("goal"),
             final_state=args.get("final_state", False),
             capture_screenshots=args.get("capture_screenshots", True),
@@ -1063,6 +1148,12 @@ def _batch_tool(
     final_screenshot = args.get("final_screenshot", False)
     monitor = args.get("screenshot_monitor", 1)
     trace_id = trace_id or trace_module.generate_trace_id()
+    from computer_use.runner import MAX_TASK_STEPS
+
+    if len(actions) > MAX_TASK_STEPS:
+        raise ValueError(
+            f"batch exceeds step budget of {MAX_TASK_STEPS} actions"
+        )
 
     results: list[dict[str, Any]] = []
     failed_index: int | None = None
@@ -1083,11 +1174,11 @@ def _batch_tool(
             except Exception as exc:
                 snapshot_ref = {"error": str(exc)}
 
-        if tool_name == "batch":
+        if tool_name in {"batch", "run_task_plan"}:
             entry: dict[str, Any] = {
                 "index": i,
                 "tool": tool_name,
-                "error": "Nested batch is not supported.",
+                "error": f"Nested task tool {tool_name!r} is not supported.",
                 "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
             }
             if capture_snapshot and snapshot_ref is not None:
@@ -1129,7 +1220,7 @@ def _batch_tool(
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         }
         results.append(step_entry)
-        if isinstance(result_data, dict) and "error" in result_data:
+        if _failure_for_result(result_data) is not None:
             failed_index = i
             if stop_on_error:
                 break
@@ -1292,6 +1383,17 @@ def _current_logical_position() -> tuple[int, int]:
     return int(x), int(y)
 
 
+def _handle_tool_call(name: str, arguments: dict) -> str:
+    """Execute one MCP call without exposing input values in outer errors."""
+    safe_arguments = arguments or {}
+    try:
+        return _call_tool(name, safe_arguments)
+    except Exception as exc:
+        message = trace_module.sanitize_message(safe_arguments, str(exc))
+        logging.error("tool error: %s", message)
+        return json.dumps({"error": message})
+
+
 async def serve() -> None:
     _setup_logging()
     server = Server("computer-use")
@@ -1302,12 +1404,8 @@ async def serve() -> None:
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-        try:
-            result = _call_tool(name, arguments or {})
-            return [TextContent(type="text", text=result)]
-        except Exception as exc:
-            logging.exception("tool error")
-            return [TextContent(type="text", text=json.dumps({"error": str(exc)}))]
+        result = _handle_tool_call(name, arguments)
+        return [TextContent(type="text", text=result)]
 
     async with stdio_server() as (read_stream, write_stream):
         await server.run(

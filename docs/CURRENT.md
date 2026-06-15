@@ -5,27 +5,22 @@
 
 ## 当前任务
 
-完成 `docs/plans/active/smart-executor-and-trace.md` Phase 1/2/3 的 ultraverge 验收阻塞项修复。
+无进行中的代码任务。
 
-- run_task_plan 截图不再产生重复 step_index。
-- composite 工具（click_by_text/open_menu/fill_form）与 snapshot.click_by_uid 增加 safety.py 坐标与目标窗口校验。
-- 结构化错误（ui_not_found/stale_uid 等）正确写入 trace.jsonl 的 error_kind。
-- batch 在 run_task_plan 下的子步骤使用命名空间 step_index，避免与父步骤冲突。
-- batch final_screenshot 默认 monitor 修正为 1。
-- review_task 从 trace meta 读取 goal；report.md 包含 final_state_path。
+最近完成：`docs/plans/completed/mcp-audit-remediation.md`。
 
 ## 当前模式
 
-执行完成，等待进一步指令（如提交、继续 ultraverge 复评或清理临时文件）。
+直接执行模式。
 
 ## 当前负责人
 
-Kimi Code agent。
+Codex agent。
 
 ## 下一步
 
-根据用户输入决定：提交当前改动、继续复评，或开始新任务。
+客户端重新加载 computer-use MCP 配置后，复测端到端工具调用。
 
 ## 安全提示
 
-涉及真实鼠标/键盘操作；执行前确保用户未操作输入设备，并在安全环境进行。
+旧 MCP 服务进程已终止，当前会话 transport 已关闭。
