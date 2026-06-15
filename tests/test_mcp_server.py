@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,7 +15,11 @@ from computer_use.mcp_server import TOOLS, _call_tool
 
 @pytest.fixture(autouse=True)
 def _patch_trace_dir(tmp_path, monkeypatch):
+    # Load runner before tests temporarily replace mcp_server._call_tool.
+    import computer_use.runner as runner_module
     import computer_use.trace as trace_module
+
+    del runner_module
     monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path)
 
 
@@ -212,16 +217,151 @@ def test_manual_real_screenshot_capture(monkeypatch, tmp_path) -> None:
     assert Path(data["saved_path"]).is_file()
 
 
-def test_type_blocks_dangerous() -> None:
+def test_type_allows_safe_password_control(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+    import computer_use.ui_automation as uia_module
+
+    info = uia_module.ControlInfo(
+        name="Password",
+        control_type="Edit",
+        class_name="Edit",
+        process_name="app.exe",
+        is_password=True,
+        rect=(0, 0, 200, 30),
+        center=(100, 15),
+    )
+    typed = []
+    monkeypatch.setattr(server, "_current_logical_position", lambda: (100, 15))
+    monkeypatch.setattr(server, "inspect_point", lambda x, y: info)
+    monkeypatch.setattr(server, "type_text", typed.append)
+
+    data = json.loads(_call_tool("type", {"text": "safe-password"}))
+
+    assert data["typed"] is True
+    assert data["length"] == len("safe-password")
+    assert typed == ["safe-password"]
+
+
+@pytest.mark.parametrize(
+    ("process_name", "class_name"),
+    [
+        ("KeePass.exe", "Edit"),
+        ("app.exe", "#32770"),
+    ],
+)
+def test_type_blocks_sensitive_password_control(
+    monkeypatch, process_name, class_name
+) -> None:
+    import computer_use.mcp_server as server
+    import computer_use.ui_automation as uia_module
+
+    info = uia_module.ControlInfo(
+        name="Password",
+        control_type="Edit",
+        class_name=class_name,
+        process_name=process_name,
+        is_password=True,
+        rect=(0, 0, 200, 30),
+        center=(100, 15),
+    )
+    typed = []
+    monkeypatch.setattr(server, "_current_logical_position", lambda: (100, 15))
+    monkeypatch.setattr(server, "inspect_point", lambda x, y: info)
+    monkeypatch.setattr(server, "type_text", typed.append)
+
+    data = json.loads(_call_tool("type", {"text": "safe-password"}))
+
+    assert "error" in data
+    assert "sensitive" in data["error"].lower()
+    assert typed == []
+
+
+def test_type_blocks_dangerous(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
+    typed = []
+    monkeypatch.setattr(server, "type_text", typed.append)
+
     result = _call_tool("type", {"text": "rm -rf /"})
     data = json.loads(result)
     assert "error" in data or "Refusing" in result
+    assert typed == []
 
 
 def test_click_out_of_bounds() -> None:
     result = _call_tool("click", {"x": 99999, "y": 99999})
     data = json.loads(result)
     assert "error" in data or "outside" in result
+
+
+def _multi_monitor_coordinate_system() -> SimpleNamespace:
+    monitors = [
+        {"left": 0, "top": 0, "width": 1920, "height": 1080},
+        {"left": 1920, "top": 0, "width": 1920, "height": 1080},
+    ]
+    return SimpleNamespace(
+        monitors=monitors,
+        get_screen_size=lambda: SimpleNamespace(width=3840, height=1080),
+    )
+
+
+def test_click_rejects_secondary_monitor_coordinate(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
+    calls = []
+    monkeypatch.setattr(server, "get_coordinate_system", _multi_monitor_coordinate_system)
+    monkeypatch.setattr(server, "click", lambda *args, **kwargs: calls.append((args, kwargs)))
+
+    data = json.loads(_call_tool("click", {"x": 2000, "y": 500}))
+
+    assert "primary" in data["error"].lower()
+    assert calls == []
+
+
+def test_type_rejects_secondary_monitor_current_cursor(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
+    typed = []
+    monkeypatch.setattr(server, "get_coordinate_system", _multi_monitor_coordinate_system)
+    monkeypatch.setattr(server.pyautogui, "position", lambda: (2000, 500))
+    monkeypatch.setattr(server, "type_text", typed.append)
+
+    data = json.loads(_call_tool("type", {"text": "safe text"}))
+
+    assert "primary" in data["error"].lower()
+    assert typed == []
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "args", "action_name"),
+    [
+        ("key_combo", {"keys": ["ctrl", "c"]}, "key_combo"),
+        ("key_down", {"key": "ctrl"}, "key_down"),
+        ("key_up", {"key": "ctrl"}, "key_up"),
+        ("press_key", {"key": "enter"}, "press_key"),
+        ("mouse_up", {}, "mouse_up"),
+    ],
+)
+def test_current_cursor_input_rejects_secondary_monitor(
+    monkeypatch, tool_name, args, action_name
+) -> None:
+    import computer_use.mcp_server as server
+
+    calls = []
+    monkeypatch.setattr(server, "get_coordinate_system", _multi_monitor_coordinate_system)
+    monkeypatch.setattr(server.pyautogui, "position", lambda: (2000, 500))
+    monkeypatch.setattr(
+        server,
+        action_name,
+        lambda *action_args, **action_kwargs: calls.append(
+            (action_args, action_kwargs)
+        ),
+    )
+
+    data = json.loads(_call_tool(tool_name, args))
+
+    assert "primary" in data["error"].lower()
+    assert calls == []
 
 
 def test_click_gap_region() -> None:
@@ -680,6 +820,41 @@ class TestLowLevelInputTools:
         assert data["dragged"] is True
         assert calls == [(10, 20, 110, 120, 0.2, "left")]
 
+    def test_drag_rejects_sensitive_start_before_input(self, monkeypatch) -> None:
+        import computer_use.mcp_server as server
+        from computer_use.safety import SafetyError
+        from computer_use.ui_automation import ControlInfo
+
+        drag_calls = []
+
+        def inspect(x, y):
+            process_name = "keepass.exe" if (x, y) == (10, 20) else "safe.exe"
+            return ControlInfo(
+                name="",
+                control_type="Pane",
+                class_name="SafePane",
+                process_name=process_name,
+                is_password=False,
+                rect=None,
+                center=None,
+            )
+
+        def check(process_name, class_name, control_type):
+            if process_name == "keepass.exe":
+                raise SafetyError("sensitive start")
+
+        monkeypatch.setattr(server, "inspect_point", inspect)
+        monkeypatch.setattr(server, "check_target_window", check)
+        monkeypatch.setattr(server, "drag", lambda *args, **kwargs: drag_calls.append((args, kwargs)))
+
+        result = _call_tool(
+            "drag",
+            {"start_x": 10, "start_y": 20, "end_x": 110, "end_y": 120},
+        )
+
+        assert "sensitive start" in json.loads(result)["error"]
+        assert drag_calls == []
+
     def test_scroll_direction(self, monkeypatch) -> None:
         import computer_use.mcp_server as server
         from computer_use.ui_automation import ControlInfo
@@ -721,7 +896,8 @@ class TestLowLevelInputTools:
         import computer_use.mcp_server as server
 
         calls = []
-        monkeypatch.setattr(server.pyautogui, "position", lambda: (-100, 100))
+        monkeypatch.setattr(server, "get_coordinate_system", _multi_monitor_coordinate_system)
+        monkeypatch.setattr(server.pyautogui, "position", lambda: (2000, 500))
         monkeypatch.setattr(
             server,
             "scroll",
@@ -889,6 +1065,27 @@ def test_click_by_target_name(monkeypatch) -> None:
     assert find_calls == [
         {"name": "OK", "match": "exact", "scope": "desktop", "sensitive_check": False}
     ]
+
+
+def test_click_by_target_name_rejects_secondary_monitor_center(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
+    calls = []
+    monkeypatch.setattr(server, "get_coordinate_system", _multi_monitor_coordinate_system)
+    monkeypatch.setattr(
+        server,
+        "find_control",
+        lambda **kwargs: {
+            **_make_control_result("Secondary"),
+            "center": {"x": 2000, "y": 500},
+        },
+    )
+    monkeypatch.setattr(server, "click", lambda *args, **kwargs: calls.append((args, kwargs)))
+
+    data = json.loads(_call_tool("click", {"target_name": "Secondary"}))
+
+    assert "primary" in data["error"].lower()
+    assert calls == []
 
 
 def test_move_to_by_target_name(monkeypatch) -> None:
@@ -1343,6 +1540,9 @@ def test_mcp_run_task_plan_with_explicit_id_uses_single_trace(
     trace_dirs = [path for path in tmp_path.iterdir() if path.is_dir()]
     assert data["trace_id"] == "explicit-trace"
     assert [path.name for path in trace_dirs] == ["explicit-trace"]
+    report_path = Path(data["report_path"])
+    assert report_path.parent == tmp_path / "explicit-trace"
+    assert report_path.exists()
 
 
 def test_tool_logging_redacts_nested_input_values(

@@ -146,26 +146,37 @@ def validate_coordinate(
     height: int,
     monitors: list[dict[str, int]] | None = None,
 ) -> None:
-    """Raise SafetyError if coordinates are outside the screen or in a gap.
+    """Raise SafetyError unless input coordinates are on the primary screen.
 
-    Coordinates must be within the virtual screen bounds
-    [0, width-1] and [0, height-1]. If ``monitors`` is provided, the point
-    must also fall inside at least one monitor (rejects virtual screen gaps).
+    Input coordinates are intentionally restricted to non-negative physical
+    pixels on the primary monitor. Screenshot and inspection APIs use separate
+    monitor validation and may continue to cover the full virtual desktop.
+    ``monitors`` follows mss ordering, where the first entry is primary.
     """
+    if monitors:
+        primary = monitors[0]
+        primary_left = primary["left"]
+        primary_top = primary["top"]
+        primary_right = primary_left + primary["width"]
+        primary_bottom = primary_top + primary["height"]
+        if (
+            x < 0
+            or y < 0
+            or x < primary_left
+            or y < primary_top
+            or x >= primary_right
+            or y >= primary_bottom
+        ):
+            raise SafetyError(
+                f"Coordinate ({x}, {y}) is outside the primary screen input bounds "
+                f"({primary_left}, {primary_top})-({primary_right - 1}, {primary_bottom - 1})."
+            )
+        return
+
     if x < 0 or y < 0 or x >= width or y >= height:
         raise SafetyError(
-            f"Coordinate ({x}, {y}) is outside virtual screen bounds ({width}x{height})."
-        )
-
-    if monitors is not None:
-        for mon in monitors:
-            if (
-                mon["left"] <= x < mon["left"] + mon["width"]
-                and mon["top"] <= y < mon["top"] + mon["height"]
-            ):
-                return
-        raise SafetyError(
-            f"Coordinate ({x}, {y}) falls in a virtual screen gap and is not on any monitor."
+            f"Coordinate ({x}, {y}) is outside the primary screen input bounds "
+            f"({width}x{height})."
         )
 
 
@@ -200,7 +211,7 @@ def check_target_window(
     control_type: str | None,
     is_password: bool = False,
 ) -> None:
-    """Raise SafetyError if the target window/control is sensitive."""
+    """Raise SafetyError if the target process or window class is sensitive."""
     if process_name and is_sensitive_process(process_name):
         raise SafetyError(
             f"Refusing to interact with sensitive process: {process_name}"
@@ -209,8 +220,6 @@ def check_target_window(
         raise SafetyError(
             f"Refusing to interact with sensitive window class: {class_name}"
         )
-    if is_password:
-        raise SafetyError("Refusing to input text into a password control.")
 
 
 class SafetyError(Exception):

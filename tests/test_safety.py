@@ -9,6 +9,7 @@ import pytest
 from computer_use.config import load_config, reset_config_cache
 from computer_use.safety import (
     SafetyError,
+    check_target_window,
     contains_shell_metacharacters,
     is_allowed_command,
     is_dangerous_text,
@@ -63,6 +64,15 @@ def test_validate_text_input_allows_normal() -> None:
     validate_text_input("hello world")
 
 
+def test_check_target_window_allows_safe_password_control() -> None:
+    check_target_window(
+        process_name="app.exe",
+        class_name="Edit",
+        control_type="Edit",
+        is_password=True,
+    )
+
+
 def test_validate_coordinate_inside() -> None:
     validate_coordinate(100, 200, 1920, 1080)
 
@@ -78,20 +88,19 @@ def test_validate_coordinate_off_by_one() -> None:
         validate_coordinate(1920, 1080, 1920, 1080)
 
 
-def test_validate_coordinate_virtual_screen() -> None:
+def test_validate_coordinate_restricts_input_to_primary_screen() -> None:
     monitors = [
         {"left": 0, "top": 0, "width": 1920, "height": 1080},
         {"left": 1920, "top": 9, "width": 1920, "height": 1080},
     ]
     # Inside primary monitor.
     validate_coordinate(100, 200, 3840, 1089, monitors=monitors)
-    # Inside secondary monitor.
-    validate_coordinate(2000, 500, 3840, 1089, monitors=monitors)
-    # Inside virtual screen bounds but in the gap between monitors.
-    with pytest.raises(SafetyError, match="gap"):
+    # Input on a secondary monitor is outside the supported primary-screen boundary.
+    with pytest.raises(SafetyError, match="primary"):
+        validate_coordinate(2000, 500, 3840, 1089, monitors=monitors)
+    with pytest.raises(SafetyError, match="primary"):
         validate_coordinate(2000, 5, 3840, 1089, monitors=monitors)
-    # Outside virtual screen bounds.
-    with pytest.raises(SafetyError, match="outside"):
+    with pytest.raises(SafetyError, match="primary"):
         validate_coordinate(4000, 0, 3840, 1089, monitors=monitors)
 
 

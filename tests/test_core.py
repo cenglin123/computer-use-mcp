@@ -153,6 +153,11 @@ def test_create_redacted_image() -> None:
 def _fake_coordinate_system() -> core.CoordinateSystem:
     cs = core.CoordinateSystem.__new__(core.CoordinateSystem)
     cs.to_physical = lambda x, y: (x, y)  # type: ignore[method-assign]
+    cs.monitors = [
+        {"left": 0, "top": 0, "width": 1920, "height": 1080},
+        {"left": 1920, "top": 0, "width": 1920, "height": 1080},
+    ]
+    cs.get_screen_size = lambda: core.ScreenInfo(3840, 1080)  # type: ignore[method-assign]
     return cs
 
 
@@ -298,6 +303,8 @@ def test_mouse_down_moves_and_presses(monkeypatch) -> None:
 
 def test_mouse_up_without_coords_releases(monkeypatch) -> None:
     calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "position", lambda: (100, 100))
     monkeypatch.setattr(core.pyautogui, "mouseUp", lambda button: calls.append(("up", button)))
     core.mouse_up(button="left")
     assert calls == [("up", "left")]
@@ -329,6 +336,8 @@ def test_drag_moves_holds_and_releases(monkeypatch) -> None:
 
 def test_scroll_direction_up(monkeypatch) -> None:
     calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "position", lambda: (100, 100))
     monkeypatch.setattr(core.pyautogui, "scroll", lambda amount, x=None, y=None: calls.append((amount, x, y)))
     core.scroll(direction="up", clicks=5)
     assert calls == [(5, None, None)]
@@ -336,6 +345,8 @@ def test_scroll_direction_up(monkeypatch) -> None:
 
 def test_scroll_direction_down(monkeypatch) -> None:
     calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "position", lambda: (100, 100))
     monkeypatch.setattr(core.pyautogui, "scroll", lambda amount, x=None, y=None: calls.append((amount, x, y)))
     core.scroll(direction="down", clicks=2)
     assert calls == [(-2, None, None)]
@@ -348,6 +359,8 @@ def test_scroll_amount_and_direction_conflict() -> None:
 
 def test_key_down_up_and_press(monkeypatch) -> None:
     calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "position", lambda: (100, 100))
     monkeypatch.setattr(core.pyautogui, "keyDown", lambda key: calls.append(("down", key)))
     monkeypatch.setattr(core.pyautogui, "keyUp", lambda key: calls.append(("up", key)))
     monkeypatch.setattr(core.pyautogui, "press", lambda key: calls.append(("press", key)))
@@ -355,3 +368,70 @@ def test_key_down_up_and_press(monkeypatch) -> None:
     core.key_up("ctrl")
     core.press_key("enter")
     assert calls == [("down", "ctrl"), ("up", "ctrl"), ("press", "enter")]
+
+
+@pytest.mark.parametrize(
+    "invoke",
+    [
+        lambda: core.click(2000, 500),
+        lambda: core.double_click(2000, 500),
+        lambda: core.move_to(2000, 500),
+        lambda: core.mouse_down(2000, 500),
+        lambda: core.mouse_up(2000, 500),
+        lambda: core.drag(100, 100, 2000, 500),
+        lambda: core.drag(2000, 500, 100, 100),
+        lambda: core.scroll(amount=1, x=2000, y=500),
+    ],
+)
+def test_public_coordinate_input_primitives_reject_secondary_monitor(
+    monkeypatch, invoke
+) -> None:
+    calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "click", lambda *args, **kwargs: calls.append("click"))
+    monkeypatch.setattr(
+        core.pyautogui, "doubleClick", lambda *args, **kwargs: calls.append("doubleClick")
+    )
+    monkeypatch.setattr(core.pyautogui, "moveTo", lambda *args, **kwargs: calls.append("moveTo"))
+    monkeypatch.setattr(
+        core.pyautogui, "mouseDown", lambda *args, **kwargs: calls.append("mouseDown")
+    )
+    monkeypatch.setattr(core.pyautogui, "mouseUp", lambda *args, **kwargs: calls.append("mouseUp"))
+    monkeypatch.setattr(core.pyautogui, "scroll", lambda *args, **kwargs: calls.append("scroll"))
+
+    with pytest.raises(core.SafetyError, match="primary"):
+        invoke()
+
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "invoke",
+    [
+        lambda: core.scroll(amount=1),
+        lambda: core.type_text("safe"),
+        lambda: core.key_combo("ctrl", "c"),
+        lambda: core.mouse_up(),
+        lambda: core.key_down("ctrl"),
+        lambda: core.key_up("ctrl"),
+        lambda: core.press_key("enter"),
+    ],
+)
+def test_public_current_cursor_input_primitives_reject_secondary_monitor(
+    monkeypatch, invoke
+) -> None:
+    calls = []
+    monkeypatch.setattr(core, "get_coordinate_system", _fake_coordinate_system)
+    monkeypatch.setattr(core.pyautogui, "position", lambda: (2000, 500))
+    monkeypatch.setattr(core.pyautogui, "scroll", lambda *args, **kwargs: calls.append("scroll"))
+    monkeypatch.setattr(core.pyautogui, "typewrite", lambda *args, **kwargs: calls.append("typewrite"))
+    monkeypatch.setattr(core.pyautogui, "hotkey", lambda *args, **kwargs: calls.append("hotkey"))
+    monkeypatch.setattr(core.pyautogui, "mouseUp", lambda *args, **kwargs: calls.append("mouseUp"))
+    monkeypatch.setattr(core.pyautogui, "keyDown", lambda *args, **kwargs: calls.append("keyDown"))
+    monkeypatch.setattr(core.pyautogui, "keyUp", lambda *args, **kwargs: calls.append("keyUp"))
+    monkeypatch.setattr(core.pyautogui, "press", lambda *args, **kwargs: calls.append("press"))
+
+    with pytest.raises(core.SafetyError, match="primary"):
+        invoke()
+
+    assert calls == []

@@ -99,8 +99,18 @@ def test_run_task_plan_stops_on_timeout_and_records_failure(
     records = trace_module.read_trace("task-timeout")
     assert records[0]["error_kind"] == "timeout"
     review = review_mod.review_task("task-timeout")
+    assert review["summary"]["successful_steps"] == 0
+    assert review["summary"]["failed_steps"] == 1
     assert review["error_distribution"] == {"timeout": 1}
-    assert "timeout" in Path(result["report_path"]).read_text(encoding="utf-8")
+    report_row = next(
+        line
+        for line in Path(result["report_path"]).read_text(
+            encoding="utf-8"
+        ).splitlines()
+        if "wait_for_window" in line
+    )
+    assert "| failed: timeout | timeout |" in report_row
+    assert "| ok |" not in report_row
 
 
 def test_run_task_plan_stops_when_nested_batch_fails(
@@ -391,6 +401,7 @@ def test_run_task_plan_rejects_expanded_step_budget() -> None:
 def test_run_task_plan_fail_safe_generates_report(monkeypatch) -> None:
     import computer_use.mcp_server as server
     import pyautogui
+    from computer_use import review as review_mod
 
     monkeypatch.setattr(
         server,
@@ -410,3 +421,16 @@ def test_run_task_plan_fail_safe_generates_report(monkeypatch) -> None:
     assert Path(result["report_path"]).exists()
     records = trace_module.read_trace("task-fail-safe")
     assert records[0]["error_kind"] == "fail_safe"
+    review = review_mod.review_task("task-fail-safe")
+    assert review["summary"]["successful_steps"] == 0
+    assert review["summary"]["failed_steps"] == 1
+    assert review["error_distribution"] == {"fail_safe": 1}
+    report_row = next(
+        line
+        for line in Path(result["report_path"]).read_text(
+            encoding="utf-8"
+        ).splitlines()
+        if "click" in line
+    )
+    assert "| failed: fail_safe | fail_safe |" in report_row
+    assert "| ok |" not in report_row

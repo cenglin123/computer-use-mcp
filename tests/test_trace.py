@@ -90,6 +90,30 @@ def test_generate_report_creates_markdown(tmp_trace_dir: Path) -> None:
     assert "ui_not_found" in text
 
 
+def test_generate_report_marks_error_kind_as_failed(
+    tmp_trace_dir: Path,
+) -> None:
+    trace_id = "report-timeout-001"
+    trace.record_step(
+        trace_id=trace_id,
+        step_index=1,
+        tool="wait_for_window",
+        args={"name": "Missing"},
+        result={"present": False, "timeout": True},
+        error_kind="timeout",
+        error_message="Timed out waiting for window",
+    )
+
+    report_path = trace.generate_report(trace_id)
+    row = next(
+        line
+        for line in report_path.read_text(encoding="utf-8").splitlines()
+        if "wait_for_window" in line
+    )
+    assert "| failed: timeout | timeout |" in row
+    assert "| ok |" not in row
+
+
 @pytest.mark.parametrize(
     "trace_id",
     [

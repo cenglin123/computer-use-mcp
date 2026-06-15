@@ -298,6 +298,106 @@ def test_click_by_uid_success(monkeypatch, _fake_tree) -> None:
     assert click_calls == [(45, 30, 0.3, "right")]
 
 
+def test_click_by_uid_rejects_secondary_monitor_center(monkeypatch) -> None:
+    from computer_use.safety import validate_coordinate
+
+    click_calls = []
+    snapshot = {
+        "controls": [
+            {
+                "uid": "secondary",
+                "center": {"x": 2000, "y": 500},
+                "process_name": "safe.exe",
+                "class_name": "Button",
+                "control_type": "Button",
+            }
+        ]
+    }
+    monkeypatch.setattr(
+        snapshot_mod,
+        "get_coordinate_system",
+        lambda: SimpleNamespace(
+            get_screen_size=lambda: SimpleNamespace(width=3840, height=1080),
+            monitors=[
+                {"left": 0, "top": 0, "width": 1920, "height": 1080},
+                {"left": 1920, "top": 0, "width": 1920, "height": 1080},
+            ],
+        ),
+    )
+    monkeypatch.setattr(snapshot_mod, "validate_coordinate", validate_coordinate)
+    monkeypatch.setattr(
+        snapshot_mod,
+        "click",
+        lambda *args, **kwargs: click_calls.append((args, kwargs)),
+    )
+
+    result = snapshot_mod.click_by_uid("secondary", snapshot)
+
+    assert result["error"] == "safety_block"
+    assert "primary" in result["detail"].lower()
+    assert click_calls == []
+
+
+def test_click_by_uid_uses_live_target_metadata(monkeypatch) -> None:
+    from computer_use.safety import SafetyError
+    from computer_use.ui_automation import ControlInfo
+
+    click_calls = []
+    snapshot = {
+        "controls": [
+            {
+                "uid": "forged-safe-target",
+                "center": {"x": 100, "y": 200},
+                "process_name": "safe.exe",
+                "class_name": "Button",
+                "control_type": "Button",
+            }
+        ]
+    }
+    monkeypatch.setattr(
+        snapshot_mod,
+        "get_coordinate_system",
+        lambda: SimpleNamespace(
+            get_screen_size=lambda: SimpleNamespace(width=1920, height=1080),
+            monitors=[{"left": 0, "top": 0, "width": 1920, "height": 1080}],
+        ),
+    )
+    monkeypatch.setattr(
+        snapshot_mod,
+        "inspect_point",
+        lambda x, y: ControlInfo(
+            name="Password Manager",
+            control_type="Pane",
+            class_name="SensitivePane",
+            process_name="keepass.exe",
+            is_password=False,
+            rect=None,
+            center=None,
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        snapshot_mod,
+        "check_target_window",
+        lambda process_name, class_name, control_type: (
+            (_ for _ in ()).throw(SafetyError("live target is sensitive"))
+            if process_name == "keepass.exe"
+            else None
+        ),
+    )
+    monkeypatch.setattr(
+        snapshot_mod,
+        "click",
+        lambda *args, **kwargs: click_calls.append((args, kwargs)),
+    )
+
+    result = snapshot_mod.click_by_uid("forged-safe-target", snapshot)
+
+    assert result["error"] == "safety_block"
+    assert "live target is sensitive" in result["detail"]
+    assert click_calls == []
+
+
 def test_click_by_uid_stale() -> None:
     result = snapshot_mod.click_by_uid("no-such-uid", {"controls": []})
     assert result == {"error": "stale_uid"}

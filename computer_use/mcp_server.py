@@ -124,7 +124,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="click",
-        description="Click a UI Automation control by name or at the given physical virtual screen coordinates (x, y). The cursor moves smoothly over a short duration to avoid closing hover-activated menus. Provide either target_name or both x and y.",
+        description="Click a UI Automation control by name or at the given non-negative primary-screen physical coordinates (x, y). The cursor moves smoothly over a short duration to avoid closing hover-activated menus. Provide either target_name or both x and y.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -138,8 +138,8 @@ TOOLS: list[Tool] = [
                     "default": "contains",
                     "description": "Matching mode for target_name.",
                 },
-                "x": {"type": "integer", "description": "Physical virtual screen x coordinate"},
-                "y": {"type": "integer", "description": "Physical virtual screen y coordinate"},
+                "x": {"type": "integer", "description": "Primary-screen physical x coordinate"},
+                "y": {"type": "integer", "description": "Primary-screen physical y coordinate"},
                 "duration": {
                     "type": "number",
                     "default": DEFAULT_MOVE_DURATION,
@@ -161,7 +161,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="move_to",
-        description="Move the cursor to a UI Automation control by name or to the given physical virtual screen coordinates (x, y). The cursor moves smoothly over a short duration to avoid closing hover-activated menus. Provide either target_name or both x and y.",
+        description="Move the cursor to a UI Automation control by name or to the given non-negative primary-screen physical coordinates (x, y). The cursor moves smoothly over a short duration to avoid closing hover-activated menus. Provide either target_name or both x and y.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -187,7 +187,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="scroll",
-        description="Scroll the mouse wheel by amount or direction, optionally at physical virtual screen coordinates.",
+        description="Scroll the mouse wheel by amount or direction, optionally at non-negative primary-screen physical coordinates.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -237,7 +237,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="mouse_down",
-        description="Press and hold a mouse button at the given physical virtual screen coordinates.",
+        description="Press and hold a mouse button at the given non-negative primary-screen physical coordinates.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -884,6 +884,8 @@ def _dispatch_tool(
         text = args["text"]
         validate_text_input(text)
         x, y = _current_logical_position()
+        size = cs.get_screen_size()
+        validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
         info = inspect_point(x, y)
         check_target_window(
             info.process_name,
@@ -897,6 +899,8 @@ def _dispatch_tool(
     if name == "key_combo":
         keys = args["keys"]
         x, y = _current_logical_position()
+        size = cs.get_screen_size()
+        validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
         info = inspect_point(x, y)
         check_target_window(info.process_name, info.class_name, info.control_type)
         key_combo(*keys)
@@ -924,6 +928,8 @@ def _dispatch_tool(
             check_target_window(info.process_name, info.class_name, info.control_type)
         else:
             x, y = _current_logical_position()
+            size = cs.get_screen_size()
+            validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
             info = inspect_point(x, y)
             check_target_window(info.process_name, info.class_name, info.control_type)
         mouse_up(x, y, button=button)
@@ -940,8 +946,18 @@ def _dispatch_tool(
         size = cs.get_screen_size()
         validate_coordinate(start_x, start_y, size.width, size.height, monitors=cs.monitors)
         validate_coordinate(end_x, end_y, size.width, size.height, monitors=cs.monitors)
-        info = inspect_point(end_x, end_y)
-        check_target_window(info.process_name, info.class_name, info.control_type)
+        start_info = inspect_point(start_x, start_y)
+        check_target_window(
+            start_info.process_name,
+            start_info.class_name,
+            start_info.control_type,
+        )
+        end_info = inspect_point(end_x, end_y)
+        check_target_window(
+            end_info.process_name,
+            end_info.class_name,
+            end_info.control_type,
+        )
         drag(start_x, start_y, end_x, end_y, duration=duration, button=button)
         return json.dumps({
             "dragged": True,
@@ -956,6 +972,8 @@ def _dispatch_tool(
     if name == "key_down":
         key = args["key"]
         x, y = _current_logical_position()
+        size = cs.get_screen_size()
+        validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
         info = inspect_point(x, y)
         check_target_window(info.process_name, info.class_name, info.control_type)
         key_down(key)
@@ -964,6 +982,8 @@ def _dispatch_tool(
     if name == "key_up":
         key = args["key"]
         x, y = _current_logical_position()
+        size = cs.get_screen_size()
+        validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
         info = inspect_point(x, y)
         check_target_window(info.process_name, info.class_name, info.control_type)
         key_up(key)
@@ -972,6 +992,8 @@ def _dispatch_tool(
     if name == "press_key":
         key = args["key"]
         x, y = _current_logical_position()
+        size = cs.get_screen_size()
+        validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
         info = inspect_point(x, y)
         check_target_window(info.process_name, info.class_name, info.control_type)
         press_key(key)

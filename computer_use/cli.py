@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("size", help="Output virtual screen size as JSON")
     sub.add_parser("monitors", help="Output monitor list as JSON")
 
-    p_click = sub.add_parser("click", help="Click at physical virtual screen coordinates")
+    p_click = sub.add_parser("click", help="Click at primary-screen physical coordinates")
     p_click.add_argument("x", type=int)
     p_click.add_argument("y", type=int)
     p_click.add_argument(
@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
         help=f"Seconds to spend moving the cursor before clicking (default: {DEFAULT_MOVE_DURATION})",
     )
 
-    p_move = sub.add_parser("move", help="Move mouse to physical virtual screen coordinates")
+    p_move = sub.add_parser("move", help="Move mouse to primary-screen physical coordinates")
     p_move.add_argument("x", type=int)
     p_move.add_argument("y", type=int)
     p_move.add_argument(
@@ -117,16 +117,21 @@ def main(argv: list[str] | None = None) -> int:
             _dispatch_mouse_subcommand(args, move_to, "moved")
         elif args.cmd == "scroll":
             if args.x is not None and args.y is not None:
-                size = cs.get_screen_size()
-                validate_coordinate(args.x, args.y, size.width, size.height, monitors=cs.monitors)
-                info = inspect_point(args.x, args.y)
-                check_target_window(
-                    info.process_name, info.class_name, info.control_type
-                )
+                x, y = args.x, args.y
+            else:
+                x, y = _current_logical_position()
+            size = cs.get_screen_size()
+            validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
+            info = inspect_point(x, y)
+            check_target_window(
+                info.process_name, info.class_name, info.control_type
+            )
             scroll(args.amount, args.x, args.y)
         elif args.cmd == "type":
             validate_text_input(args.text)
             x, y = _current_logical_position()
+            size = cs.get_screen_size()
+            validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
             info = inspect_point(x, y)
             check_target_window(
                 info.process_name,
@@ -137,6 +142,8 @@ def main(argv: list[str] | None = None) -> int:
             type_text(args.text)
         elif args.cmd == "key":
             x, y = _current_logical_position()
+            size = cs.get_screen_size()
+            validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
             info = inspect_point(x, y)
             check_target_window(info.process_name, info.class_name, info.control_type)
             key_combo(*args.keys)

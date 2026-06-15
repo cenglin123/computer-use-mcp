@@ -65,6 +65,40 @@ def test_click_by_text_hits_and_clicks(monkeypatch) -> None:
     ]
 
 
+def test_click_by_text_rejects_secondary_monitor_center(monkeypatch) -> None:
+    from computer_use.safety import validate_coordinate
+
+    click_calls = []
+    monkeypatch.setattr(
+        composite_mod,
+        "get_coordinate_system",
+        lambda: SimpleNamespace(
+            get_screen_size=lambda: SimpleNamespace(width=3840, height=1080),
+            monitors=[
+                {"left": 0, "top": 0, "width": 1920, "height": 1080},
+                {"left": 1920, "top": 0, "width": 1920, "height": 1080},
+            ],
+        ),
+    )
+    monkeypatch.setattr(composite_mod, "validate_coordinate", validate_coordinate)
+    monkeypatch.setattr(
+        composite_mod,
+        "find_control",
+        lambda **kwargs: _make_control_result("Secondary", x=2000, y=500),
+    )
+    monkeypatch.setattr(
+        composite_mod,
+        "click",
+        lambda *args, **kwargs: click_calls.append((args, kwargs)),
+    )
+
+    result = composite_mod.click_by_text("Secondary")
+
+    assert result["error"] == "safety_block"
+    assert "primary" in result["detail"].lower()
+    assert click_calls == []
+
+
 def test_click_by_text_not_found_returns_candidates(monkeypatch) -> None:
     def fake_find_control(**kwargs):
         return {"found": False, "uia_available": True, "blocked": False, "reason": "not_found"}

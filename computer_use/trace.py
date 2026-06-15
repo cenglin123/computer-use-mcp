@@ -285,7 +285,9 @@ def generate_report(
         duration = rec.get("duration_ms", 0)
         error = rec.get("error_kind") or "无"
         result = rec.get("result")
-        if isinstance(result, dict):
+        if rec.get("error_kind"):
+            result_summary = f"failed: {rec['error_kind']}"
+        elif isinstance(result, dict):
             if "error" in result:
                 result_summary = f"error: {result['error']}"
             else:

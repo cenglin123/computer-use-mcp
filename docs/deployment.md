@@ -52,3 +52,5 @@ python -m computer_use click 100 100
 
 - 运行本服务的机器必须有真实显示器或虚拟显示器；无头环境需要配合虚拟显示驱动（如 `IddSampleDriver`、Parsec VDD）。
 - 多显示器混合 DPI 场景下，`CoordinateSystem` 会拒绝启动。统一各显示器缩放比例后再运行。
+- 输入只允许 mss 枚举中的主显示器范围；副屏仍可截图和检查，但不能接收鼠标或键盘输入。
+- 显示器拓扑由进程内 `CoordinateSystem` 缓存。主屏切换、热插拔或分辨率变化后应重启 MCP 服务，使安全边界与当前桌面一致。

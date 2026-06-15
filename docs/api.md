@@ -4,9 +4,9 @@
 
 ## 通用约定
 
-- 所有坐标参数都是**物理虚拟屏幕像素**，与 `mss` 截图像素 1:1 对应。原点为虚拟桌面左上角。
+- 感知类坐标是**物理虚拟屏幕像素**，与 `mss` 截图像素 1:1 对应；截图、`get_monitors`、`find_control`、`inspect_point` 和 UI 快照可描述整个虚拟桌面。
 - `monitor` 参数：0 表示整个虚拟桌面，1 表示主显示器，2+ 表示扩展显示器。
-- 所有操作在执行前都会经过 `safety.py` 的坐标检查；落在显示器间隙或虚拟屏幕外的坐标会被拒绝。
+- 输入类工具只允许主显示器内的非负物理坐标。`core.py` 的最终公共输入原语强制执行该边界，显式坐标和依赖当前光标的输入均不能通过直接调用绕过；MCP/CLI 在此基础上继续执行目标窗口检查。副屏、负坐标和主屏外坐标会被拒绝。
 - **每个工具响应都包含 `timestamp`**（ISO 8601，UTC，毫秒精度），便于复盘时计算各步骤间隔。即使出错，返回的 `{"error": "..."}` 对象也带 `timestamp`。
 
 ## 视觉理解工作流
@@ -31,17 +31,19 @@
 
 ### 输入类
 
-- `click` / `move_to`：鼠标操作。坐标必须落在真实显示器内。光标会平滑移动到目标位置，默认耗时 0.2 秒（来自 `computer_use.core.DEFAULT_MOVE_DURATION`）；可通过 `duration` 参数调整，避免快速移动导致悬停菜单关闭。`duration` 必须是非负有限数（`>= 0` 且不能为 NaN），否则抛出 `ValueError`。
+- `click` / `move_to`：鼠标操作。坐标必须落在主显示器内且非负。光标会平滑移动到目标位置，默认耗时 0.2 秒（来自 `computer_use.core.DEFAULT_MOVE_DURATION`）；可通过 `duration` 参数调整，避免快速移动导致悬停菜单关闭。`duration` 必须是非负有限数（`>= 0` 且不能为 NaN），否则抛出 `ValueError`。
   - `click` 支持 `button` 参数：`left`（默认）/`right`/`middle`。
   - `click` 支持 `double_click=true`：执行原生双击，兼容 `target_name` 和坐标两种定位模式，也兼容 `button`。
   - 支持 `target_name` 参数：按 UIA 控件名称定位，命中后取控件中心点击/移动；未命中且同时提供了 `(x, y)` 时回退到坐标模式。
   - `match`：与 `target_name` 配合，取值 `exact` / `contains` / `startswith`，默认 `contains`。
-- `mouse_down` / `mouse_up`：在指定坐标按下或释放鼠标按键，支持 `left`/`right`/`middle`。`mouse_up` 的坐标可选；省略时在光标当前位置释放。
+- `mouse_down` / `mouse_up`：在主屏坐标按下或释放鼠标按键，支持 `left`/`right`/`middle`。`mouse_up` 的坐标可选；省略时仍校验当前光标位于主屏后再释放。
 - `drag`：从 `(start_x, start_y)` 拖拽到 `(end_x, end_y)`，支持指定 `button` 和 `duration`。
-- `scroll`：滚动鼠标滚轮。可用 `amount`（正数向上、负数向下），或改用 `direction`（`up`/`down`）+ `clicks`。省略坐标时仍会检查当前光标所在目标窗口。
-- `type`：模拟键盘输入文本。当前光标位置决定输入目标。
+  - 在任何移动或按键输入发生前，起点和终点都会分别执行坐标与实时目标窗口检查；任一点不安全时不会开始拖拽。
+- `scroll`：滚动鼠标滚轮。可用 `amount`（正数向上、负数向下），或改用 `direction`（`up`/`down`）+ `clicks`。省略坐标时仍会检查当前光标位于主屏且目标窗口安全。
+- `type`：模拟键盘输入文本。当前光标位置决定输入目标，光标必须位于主屏；键盘组合、按键按下/释放和单键输入遵循同一边界。
 - `key_combo`：模拟组合键（如 `ctrl`, `c`）。
 - `key_down` / `key_up` / `press_key`：更细粒度的键盘事件，分别用于按住、释放、按压单个键，便于构造 `ctrl`/`shift`/`alt` 等组合或长按场景。
+- `click_by_uid`：snapshot 仅提供 UID 对应的定位坐标；执行点击前会按最终坐标实时检查目标窗口，不信任客户端 snapshot 中的进程、窗口类名或控件类型元数据。
 
 ### 控件类
 

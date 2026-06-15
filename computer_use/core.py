@@ -13,7 +13,7 @@ import mss
 import pyautogui
 from PIL import Image
 
-from computer_use.safety import SafetyError
+from computer_use.safety import SafetyError, validate_coordinate
 
 # Make this process DPI-aware so that pyautogui coordinates and mss screenshots
 # use a consistent coordinate system. On Windows this affects how logical vs
@@ -325,6 +325,25 @@ def validate_duration(duration: float) -> float:
     return duration
 
 
+def _validate_input_coordinate(
+    cs: CoordinateSystem,
+    x: int,
+    y: int,
+) -> tuple[int, int]:
+    """Validate a final input coordinate and return its physical position."""
+    size = cs.get_screen_size()
+    validate_coordinate(x, y, size.width, size.height, monitors=cs.monitors)
+    return cs.to_physical(x, y)
+
+
+def _validate_current_input_coordinate() -> tuple[int, int]:
+    """Validate and return the current cursor position for coordinate-free input."""
+    x, y = pyautogui.position()
+    cs = get_coordinate_system()
+    _validate_input_coordinate(cs, x, y)
+    return x, y
+
+
 def click(x: int, y: int, duration: float = DEFAULT_MOVE_DURATION, button: str = "left") -> None:
     """Click at physical virtual screen coordinates (x, y).
 
@@ -338,7 +357,7 @@ def click(x: int, y: int, duration: float = DEFAULT_MOVE_DURATION, button: str =
     validate_duration(duration)
     button = validate_button(button)
     cs = get_coordinate_system()
-    phys_x, phys_y = cs.to_physical(x, y)
+    phys_x, phys_y = _validate_input_coordinate(cs, x, y)
     pyautogui.click(phys_x, phys_y, duration=duration, button=button)
 
 
@@ -354,7 +373,7 @@ def double_click(x: int, y: int, duration: float = DEFAULT_MOVE_DURATION, button
     validate_duration(duration)
     button = validate_button(button)
     cs = get_coordinate_system()
-    phys_x, phys_y = cs.to_physical(x, y)
+    phys_x, phys_y = _validate_input_coordinate(cs, x, y)
     pyautogui.doubleClick(phys_x, phys_y, duration=duration, button=button)
 
 
@@ -368,7 +387,7 @@ def move_to(x: int, y: int, duration: float = DEFAULT_MOVE_DURATION) -> None:
     """
     validate_duration(duration)
     cs = get_coordinate_system()
-    phys_x, phys_y = cs.to_physical(x, y)
+    phys_x, phys_y = _validate_input_coordinate(cs, x, y)
     pyautogui.moveTo(phys_x, phys_y, duration=duration)
 
 
@@ -376,17 +395,20 @@ def scroll(amount: int, x: int | None = None, y: int | None = None) -> None:
     """Scroll the mouse wheel by amount, optionally at physical virtual screen coordinates."""
     if x is not None and y is not None:
         cs = get_coordinate_system()
-        phys_x, phys_y = cs.to_physical(x, y)
+        phys_x, phys_y = _validate_input_coordinate(cs, x, y)
         pyautogui.scroll(amount, phys_x, phys_y)
     else:
+        _validate_current_input_coordinate()
         pyautogui.scroll(amount)
 
 
 def type_text(text: str, interval: float = 0.01) -> None:
+    _validate_current_input_coordinate()
     pyautogui.typewrite(text, interval=interval)
 
 
 def key_combo(*keys: str) -> None:
+    _validate_current_input_coordinate()
     pyautogui.hotkey(*keys)
 
 
@@ -394,7 +416,7 @@ def mouse_down(x: int, y: int, button: str = "left") -> None:
     """Press a mouse button at physical virtual screen coordinates (x, y)."""
     button = validate_button(button)
     cs = get_coordinate_system()
-    phys_x, phys_y = cs.to_physical(x, y)
+    phys_x, phys_y = _validate_input_coordinate(cs, x, y)
     pyautogui.moveTo(phys_x, phys_y)
     pyautogui.mouseDown(button=button)
 
@@ -404,8 +426,10 @@ def mouse_up(x: int | None = None, y: int | None = None, button: str = "left") -
     button = validate_button(button)
     if x is not None and y is not None:
         cs = get_coordinate_system()
-        phys_x, phys_y = cs.to_physical(x, y)
+        phys_x, phys_y = _validate_input_coordinate(cs, x, y)
         pyautogui.moveTo(phys_x, phys_y)
+    else:
+        _validate_current_input_coordinate()
     pyautogui.mouseUp(button=button)
 
 
@@ -427,8 +451,8 @@ def drag(
     validate_duration(duration)
     button = validate_button(button)
     cs = get_coordinate_system()
-    phys_start_x, phys_start_y = cs.to_physical(start_x, start_y)
-    phys_end_x, phys_end_y = cs.to_physical(end_x, end_y)
+    phys_start_x, phys_start_y = _validate_input_coordinate(cs, start_x, start_y)
+    phys_end_x, phys_end_y = _validate_input_coordinate(cs, end_x, end_y)
     pyautogui.moveTo(phys_start_x, phys_start_y)
     pyautogui.mouseDown(button=button)
     pyautogui.moveTo(phys_end_x, phys_end_y, duration=duration)
@@ -467,24 +491,28 @@ def scroll(
 
     if x is not None and y is not None:
         cs = get_coordinate_system()
-        phys_x, phys_y = cs.to_physical(x, y)
+        phys_x, phys_y = _validate_input_coordinate(cs, x, y)
         pyautogui.scroll(amount, phys_x, phys_y)
     else:
+        _validate_current_input_coordinate()
         pyautogui.scroll(amount)
 
 
 def key_down(key: str) -> None:
     """Hold a keyboard key down (press without release)."""
+    _validate_current_input_coordinate()
     pyautogui.keyDown(key)
 
 
 def key_up(key: str) -> None:
     """Release a keyboard key held with ``key_down``."""
+    _validate_current_input_coordinate()
     pyautogui.keyUp(key)
 
 
 def press_key(key: str) -> None:
     """Press and release a single keyboard key."""
+    _validate_current_input_coordinate()
     pyautogui.press(key)
 
 

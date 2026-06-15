@@ -1,16 +1,8 @@
 # MCP Audit Remediation Implementation Plan
 
-## 执行结果
-
-- 状态：已完成，独立 reviewer 终审无阻断项。
-- 自动化验证：`226 passed, 1 skipped`；跳过项为默认禁用的真实桌面截图测试。
-- 人工/集成验证：设置 `COMPUTER_USE_RUN_MANUAL=1` 后真实桌面截图测试通过。
-- 未主动注入真实滚轮和角落 fail-safe，避免改变用户前台应用或干扰远控；对应执行和报告路径已有自动化覆盖。
-- MCP 端到端复测前已终止 8 个旧服务进程；当前会话 transport 随之关闭，需要客户端重新加载 MCP 后复测。
-
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:test-driven-development to implement each defect with a verified RED/GREEN cycle.
 
-**Goal:** 修复深度审计中除“允许输入密码”和“仅限制主屏”之外的全部确认缺陷。
+**Goal:** 修复深度审计中的全部确认缺陷，同时显式保留“安全密码控件允许输入”和“仅限制主屏”两项用户确认的产品边界。
 
 **Architecture:** 保持现有 MCP 工具接口不变，在安全边界、任务调度和 trace 层增加集中校验。避免重构 `mcp_server.py` 的整体结构，只提取足以消除重复判断的轻量辅助函数。所有行为变更先补回归测试，再实施最小修复。
 
@@ -33,10 +25,21 @@
 9. 日志与 trace 原样记录输入文本。
 10. PyAutoGUI fail-safe 未结构化记录，任务报告中断。
 
-明确不修：
+明确保留：
 
-- 允许向密码框输入内容，这是用户确认的产品特性。
-- 只支持主屏/非负坐标，这是用户确认的当前产品边界。
+- 安全目标中的密码控件必须允许输入，这是用户确认的产品特性；密码状态本身不得成为阻断条件，并须有 safety 与 MCP 回归测试，同时继续阻断敏感进程/类名和危险文本。
+- 只支持主屏/非负坐标，这是用户确认的当前产品边界；本计划不新增负坐标或副屏输入支持。
+
+### 输入坐标安全边界
+
+- 感知与输入采用不同坐标边界：截图、`get_monitors`、窗口/控件检查等只读感知能力可覆盖虚拟桌面、`monitor=0` 和副屏；任何鼠标、拖拽、滚动、点击或由 UIA/快照派生的指针输入，只允许主屏内的非负物理坐标。
+- 主屏坐标校验必须下沉到 `core.py` 的最终公共输入原语，确保直接调用也无法绕过；有显式坐标的原语校验该坐标，无显式坐标的滚轮、键盘和鼠标释放原语校验当前光标位置。`core.py` 不承担依赖 UIA 的目标窗口检查，目标检查继续由 MCP/CLI 等安全执行层负责。
+- `safety.py` 提供统一主屏坐标规则，调用方不得通过传入全部显示器范围扩大输入能力；`to_physical` 只负责坐标转换，转换后的输入坐标仍必须经过主屏校验。
+- 必须覆盖 MCP 显式坐标动作、当前光标位置上的滚动/键盘输入安全检查、CLI 指针输入、composite 与 `target_name`/UIA 派生坐标、snapshot `click_by_uid`，确保所有公开输入路线不可绕过主屏限制。
+- 拖拽必须在任何按键或移动输入发生前检查实际起点和终点的坐标及目标窗口；任一点敏感时不得执行拖拽。
+- snapshot UID 点击只能使用 snapshot 定位坐标，不得信任 snapshot 携带的进程、类名或控件类型作为安全事实；执行前必须按最终坐标实时检查目标。
+- 保留并回归验证敏感进程、窗口类名、危险文本检查；不修改已确认的安全密码控件输入行为。
+- TDD 验收必须先用 RED 测试证明直接 core 调用、敏感拖拽起点和伪造 snapshot 元数据可绕过，再实现修复并确认 GREEN；同时验证主屏输入正常，以及多显示器截图、`monitor=0`、副屏截图和 `get_monitors` 行为不变。
 
 ## 影响文件
 
@@ -76,6 +79,9 @@
 
 ## Task 3：输入安全与敏感截图
 
+- [ ] 在 `tests/test_safety.py` 增加密码状态本身不会导致 `check_target_window` 拒绝的回归测试，确认 RED。
+- [ ] 在 `tests/test_mcp_server.py` 增加 MCP `type` 可向安全密码控件输入的回归测试，并确认敏感进程/类名和危险文本仍被阻断，确认 RED。
+- [ ] 修改输入安全检查：移除密码状态这一阻断条件，保留进程、窗口类名、坐标和危险文本检查；直接 CLI 与 MCP 通过同一安全规则保持一致。
 - [ ] 在 `tests/test_mcp_server.py` 增加无坐标 `scroll` 对当前鼠标目标执行安全检查的测试，确认 RED。
 - [ ] 在 `tests/test_composite.py` 增加 `scroll_until` 继承该安全检查的测试。
 - [ ] 修改 `mcp_server.py`，所有滚动都检查当前鼠标位置对应目标；保留主屏坐标限制。
@@ -125,12 +131,18 @@
 - [ ] 更新 `docs/api.md` 的路径边界、递归限制、timeout/fail-safe 和 trace 脱敏语义。
 - [ ] 用 `python scripts/changelog.py add --title ... --body ...` 写入当天 CHANGELOG。
 
-## Task 8：独立验收与归档
+## Task 8：主屏输入边界
 
-- [ ] 执行完成后 Spawn 全新 reviewer，对照本计划、用户排除项和 git diff 审计实现。
-- [ ] Reviewer 必须核对：没有改变密码输入特性；没有新增负坐标/副屏输入支持；所有验收标准有测试证据。
-- [ ] 若 reviewer 有阻断项，保留计划在 `active/` 并修复后重新验收。
-- [ ] Reviewer 通过后，将本计划移至 `docs/plans/completed/`，更新 `docs/CURRENT.md`。
+- [x] 审计全部 `validate_coordinate`、`to_physical` 和公开指针/输入路线，区分只读感知坐标与会产生真实输入的坐标。
+- [x] 在 safety 层建立单一主屏输入坐标校验；禁止 MCP、CLI、composite、snapshot 或 UIA/`target_name` 派生路线自行传入全显示器范围放宽边界。
+- [x] 先增加 RED 回归测试：至少覆盖 MCP 显式坐标动作、当前光标动作、composite/UIA 派生动作、snapshot `click_by_uid`、可测试的 CLI 输入路线和主屏正常路径。
+- [x] 保留 screenshot 的 `monitor=0`、副屏选择和虚拟桌面能力，并保留 `get_monitors` 多显示器枚举测试。
+- [x] 在 `core.py` 最终公共输入原语强制主屏坐标边界，覆盖直接调用和依赖当前光标位置的输入。
+- [x] 拖拽在执行任何真实输入前同时检查起点和终点的坐标及实时目标。
+- [x] snapshot UID 点击按最终坐标实时获取目标信息，不信任客户端 snapshot 安全元数据。
+- [x] 不弱化敏感进程、类名、危险文本检查，不修改密码输入行为，不修改截图光标标记。
+- [x] 更新 `docs/api.md` 与输入截图安全缺陷文档，只描述当前根因与最终边界。
+- [x] 运行受影响测试和完整测试套件。
 
 ## 验收标准
 
@@ -144,6 +156,8 @@
 - `COMPUTER_USE_CONFIG` 实际控制配置文件。
 - trace 与日志不保存输入正文。
 - 脱敏步骤明确不可重放，不会用占位符执行真实输入。
+- 密码控件状态本身不阻断输入；安全密码控件可通过 MCP 和共用安全检查输入，敏感进程/类名与危险文本仍被拒绝，并有回归测试覆盖。
+- 所有产生真实指针输入的公开路线只接受主屏内非负物理坐标，包括显式坐标、当前光标、CLI、composite、snapshot 和 UIA/`target_name` 派生坐标；副屏和负坐标均被拒绝。
+- 截图、显示器枚举和只读检查继续支持虚拟桌面、`monitor=0` 与副屏，不因输入限制而退化。
 - 完整自动化测试通过。
 - GUI 安全人工验证完成。
-- 独立 reviewer 验收通过后才归档计划。

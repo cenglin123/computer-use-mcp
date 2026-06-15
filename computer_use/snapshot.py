@@ -18,7 +18,7 @@ import pyautogui
 
 from computer_use.core import click, get_coordinate_system, get_monitors, save_screenshot
 from computer_use.safety import check_target_window, validate_coordinate
-from computer_use.ui_automation import _get_process_name
+from computer_use.ui_automation import _get_process_name, inspect_point
 
 
 try:
@@ -282,10 +282,11 @@ def click_by_uid(
                 cs = get_coordinate_system()
                 size = cs.get_screen_size()
                 validate_coordinate(center["x"], center["y"], size.width, size.height, monitors=cs.monitors)
+                info = inspect_point(center["x"], center["y"])
                 check_target_window(
-                    control.get("process_name"),
-                    control.get("class_name"),
-                    control.get("control_type"),
+                    info.process_name,
+                    info.class_name,
+                    info.control_type,
                 )
             except Exception as exc:
                 return {"error": "safety_block", "detail": str(exc)}
@@ -299,4 +300,3 @@ def click_by_uid(
                 "duration": duration,
             }
     return {"error": "stale_uid"}
-

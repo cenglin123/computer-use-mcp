@@ -34,8 +34,8 @@
 ## 项目记忆
 
 - **用户**：中文交互；偏好先规划再执行，重要任务走 converge 评审；关注工具执行效率与安全性。
-- **项目上下文**：Windows GUI 自动化 MCP 服务器；核心依赖 `pyautogui` + 可选 `uiautomation`；用多模态视觉读图，不再提供 OCR 工具；`screenshot` 只返回本地文件路径引用，绝不返回 base64；`batch.final_screenshot` 默认关闭，避免上下文被截图撑爆。
-- **关键教训**：优先用模型视觉 + UIA 语义 + Shell 启动；GUI 改动手动验证，测试前确保无人操作输入设备；自定义绘制界面（如 HiBit 标题栏按钮/菜单）常无法 UIA 定位，需回退视觉定位；等待优先用 `wait_for_window`/`wait_for_control`，必要时用 `sleep`；长上下文下回合制截图分析极慢，应通过 MCP 原生 `batch` 打包动作并减少 ReadMediaFile；GUI 任务执行遵循“分解 → 截图定位 → 调用 MCP 原生工具模块（带参数）→ 截图验证 → 推导下一步”的标准化闭环；MCP 只做最简键鼠宏 + 屏幕观察，复杂多步任务由上层 Agent 用 ReAct 边截图边规划；桌面图标应通过 `SysListView32` 的 `LVM_GETITEMPOSITION` 读取精确位置，避免目测；优先使用 `mcp__computer-use__*` 原生工具调用，避免在 Bash 里写 Python 再调 `_call_tool`；所有工具响应都带 `timestamp`，便于复盘时间间隔。
+- **项目上下文**：Windows GUI 自动化 MCP；核心为 `pyautogui` + 可选 `uiautomation`；模型直接读图，无 OCR 工具；截图只返回路径，`batch.final_screenshot` 默认关闭。
+- **关键教训**：优先模型视觉、UIA 和 Shell 启动；自绘界面需回退视觉定位；等待优先事件工具，必要时 `sleep`；长任务用原生 `batch` 降低往返；MCP 只做键鼠宏和观察，规划留给上层 ReAct；桌面图标用 `LVM_GETITEMPOSITION` 精确定位；直接调用 `mcp__computer-use__*`，不写 Python 包装 `_call_tool`。
 - **详细记忆**：[.agent/memory/MEMORY.md](.agent/memory/MEMORY.md)
 
 > 每次更新 `.agent/memory/` 后，同步维护本节摘要。
