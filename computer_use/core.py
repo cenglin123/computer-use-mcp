@@ -11,7 +11,7 @@ from typing import NamedTuple
 
 import mss
 import pyautogui
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from computer_use.safety import SafetyError, validate_coordinate
 
@@ -245,8 +245,35 @@ def get_monitors() -> list[MonitorInfo]:
     return get_coordinate_system().get_monitors()
 
 
+def _draw_cursor_marker(pil_img: Image.Image, cursor_x: int, cursor_y: int) -> None:
+    """Draw a red cross-hair marker at the given image coordinates."""
+    draw = ImageDraw.Draw(pil_img)
+    width, height = pil_img.size
+    if not (0 <= cursor_x < width and 0 <= cursor_y < height):
+        return
+
+    cross_len = 20
+    color = (255, 0, 0)
+    draw.line(
+        [(max(0, cursor_x - cross_len), cursor_y), (min(width - 1, cursor_x + cross_len), cursor_y)],
+        fill=color,
+        width=2,
+    )
+    draw.line(
+        [(cursor_x, max(0, cursor_y - cross_len)), (cursor_x, min(height - 1, cursor_y + cross_len))],
+        fill=color,
+        width=2,
+    )
+    draw.ellipse(
+        [(cursor_x - 3, cursor_y - 3), (cursor_x + 3, cursor_y + 3)],
+        fill=color,
+    )
+
+
 def screenshot(monitor: int = 0) -> str:
     """Take a screenshot and return a base64 PNG.
+
+    A red cross-hair marker is drawn at the current cursor position.
 
     Args:
         monitor: 0 for the entire virtual desktop, or a 1-based mss monitor
@@ -255,8 +282,11 @@ def screenshot(monitor: int = 0) -> str:
     with mss.MSS() as sct:
         if monitor < 0 or monitor >= len(sct.monitors):
             raise ValueError(f"Invalid monitor index: {monitor}")
-        img = sct.grab(sct.monitors[monitor])
+        mon = sct.monitors[monitor]
+        img = sct.grab(mon)
     pil_img = Image.frombytes("RGB", img.size, img.rgb)
+    cursor_x, cursor_y = pyautogui.position()
+    _draw_cursor_marker(pil_img, cursor_x - mon["left"], cursor_y - mon["top"])
     buffer = io.BytesIO()
     pil_img.save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
@@ -264,6 +294,9 @@ def screenshot(monitor: int = 0) -> str:
 
 def save_screenshot(path: str | Path, monitor: int = 0) -> Path:
     """Take a screenshot and save it as a PNG file.
+
+    A red cross-hair marker is drawn at the current cursor position to make
+    debugging click coordinates easier.
 
     Args:
         path: Destination file path. Parent directory must exist.
@@ -280,8 +313,11 @@ def save_screenshot(path: str | Path, monitor: int = 0) -> Path:
     with mss.MSS() as sct:
         if monitor < 0 or monitor >= len(sct.monitors):
             raise ValueError(f"Invalid monitor index: {monitor}")
-        img = sct.grab(sct.monitors[monitor])
+        mon = sct.monitors[monitor]
+        img = sct.grab(mon)
     pil_img = Image.frombytes("RGB", img.size, img.rgb)
+    cursor_x, cursor_y = pyautogui.position()
+    _draw_cursor_marker(pil_img, cursor_x - mon["left"], cursor_y - mon["top"])
     pil_img.save(dest, format="PNG")
     return dest
 

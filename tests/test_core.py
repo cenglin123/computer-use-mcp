@@ -118,6 +118,7 @@ def test_get_monitors(multi_monitor_cs) -> None:
 def test_screenshot_default_uses_virtual_desktop(monkeypatch) -> None:
     fake = FakeMss()
     monkeypatch.setattr(core.mss, "MSS", lambda: fake)
+    monkeypatch.setattr(core.pyautogui, "position", lambda: (100, 100))
     result = core.screenshot()
     # Result is a non-empty base64 PNG string.
     assert isinstance(result, str)
@@ -127,9 +128,65 @@ def test_screenshot_default_uses_virtual_desktop(monkeypatch) -> None:
 def test_screenshot_single_monitor(monkeypatch) -> None:
     fake = FakeMss()
     monkeypatch.setattr(core.mss, "MSS", lambda: fake)
+    monkeypatch.setattr(core.pyautogui, "position", lambda: (2020, 109))
     result = core.screenshot(monitor=2)
     assert isinstance(result, str)
     assert len(result) > 100
+
+
+def test_draw_cursor_marker_draws_red_crosshair() -> None:
+    from PIL import Image
+
+    image = Image.new("RGB", (50, 50), "black")
+    core._draw_cursor_marker(image, 25, 25)
+
+    assert image.getpixel((25, 25)) == (255, 0, 0)
+    assert image.getpixel((5, 25)) == (255, 0, 0)
+    assert image.getpixel((45, 25)) == (255, 0, 0)
+    assert image.getpixel((25, 5)) == (255, 0, 0)
+    assert image.getpixel((25, 45)) == (255, 0, 0)
+    assert image.getpixel((4, 25)) == (0, 0, 0)
+
+
+def test_draw_cursor_marker_ignores_cursor_outside_image() -> None:
+    from PIL import Image
+
+    image = Image.new("RGB", (20, 20), "black")
+    core._draw_cursor_marker(image, 20, 10)
+
+    assert image.getbbox() is None
+
+
+def test_screenshot_translates_virtual_cursor_to_monitor_coordinates(monkeypatch) -> None:
+    import base64
+    import io
+
+    from PIL import Image
+
+    fake = FakeMss()
+    monkeypatch.setattr(core.mss, "MSS", lambda: fake)
+    monkeypatch.setattr(core.pyautogui, "position", lambda: (2020, 109))
+
+    result = core.screenshot(monitor=2)
+    image = Image.open(io.BytesIO(base64.b64decode(result)))
+
+    assert image.getpixel((100, 100)) == (255, 0, 0)
+
+
+def test_save_screenshot_marks_cursor_at_monitor_relative_position(
+    monkeypatch, tmp_path
+) -> None:
+    from PIL import Image
+
+    fake = FakeMss()
+    monkeypatch.setattr(core.mss, "MSS", lambda: fake)
+    monkeypatch.setattr(core.pyautogui, "position", lambda: (2020, 109))
+    path = tmp_path / "marked.png"
+
+    core.save_screenshot(path, monitor=2)
+    image = Image.open(path)
+
+    assert image.getpixel((100, 100)) == (255, 0, 0)
 
 
 def test_screenshot_invalid_monitor(monkeypatch) -> None:

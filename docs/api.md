@@ -26,7 +26,7 @@
 ### 感知类
 
 - `get_ui_snapshot`：返回当前 UI 自动化树的结构化快照，含每个可交互控件的 `uid`、`name`、`control_type`、`class_name`、`bbox`（相对虚拟屏幕坐标）和 `path`。默认 `scope=foreground`（仅前台窗口），可传 `scope=desktop` 遍历完整桌面；可传 `include_screenshot=true` 同时保存一张截图并返回路径。返回的 `uid` 是**快照级自包含句柄**，仅在本次快照返回结果中有效；窗口刷新或 UI 重排后复用会返回 `{"error": "stale_uid"}`。遍历完整桌面可能耗时数秒，优先使用前台窗口范围。
-- `screenshot`：截图后保存为 PNG，返回 `screenshot_taken`、`monitor`、`width`、`height`、`saved_path`、`timestamp`。图像从不会以 base64 形式进入上下文，模型应使用返回的路径通过 `ReadMediaFile` 等工具读取。默认捕获主屏（`monitor=1`），传 `monitor=0` 可捕获整个虚拟桌面，传 `save_path` 可覆盖保存位置。保存目录可在 `config.yaml` 的 `screenshot_dir` 中配置。
+- `screenshot`：截图后保存为 PNG，返回 `screenshot_taken`、`monitor`、`width`、`height`、`saved_path`、`timestamp`。图像从不会以 base64 形式进入上下文，模型应使用返回的路径通过 `ReadMediaFile` 等工具读取。默认捕获主屏（`monitor=1`），传 `monitor=0` 可捕获整个虚拟桌面，传 `save_path` 可覆盖保存位置。保存目录可在 `config.yaml` 的 `screenshot_dir` 中配置。保存前会在当前光标位置叠加红色十字标记；捕获单个显示器时会按该显示器左上角换算图像内坐标，光标不在捕获范围内则不绘制。
 - `get_monitors`：返回所有显示器的物理边界和主副标识，帮助 Agent 理解坐标系。
 
 ### 输入类
