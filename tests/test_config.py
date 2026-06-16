@@ -12,6 +12,8 @@ def test_load_config_defaults(tmp_path: Path) -> None:
     cfg = config.load_config(tmp_path / "nonexistent.yaml")
     assert cfg["log_dir"] == Path.home() / ".kimi-code" / "logs"
     assert cfg["screenshot_dir"] == Path.home() / ".kimi-code" / "mcp" / "computer-use" / "screenshots"
+    assert cfg["trace_dir"] == Path.home() / ".computer-use" / "traces"
+    assert cfg["task_dir"] == Path.home() / ".computer-use" / "tasks"
     assert cfg["safety"]["sensitive_processes"] == []
     assert cfg["safety"]["sensitive_window_classes"] == []
     assert cfg["safety"]["screenshot_sensitive_window_check"] is True
@@ -25,6 +27,8 @@ def test_load_config_override(tmp_path: Path) -> None:
         """
 log_dir: ~/custom-logs
 screenshot_dir: ~/custom-shots
+trace_dir: ~/custom-traces
+task_dir: ~/custom-tasks
 safety:
   sensitive_processes: ["myapp"]
   sensitive_window_classes: ["MyClass"]
@@ -37,6 +41,8 @@ display:
     cfg = config.load_config(path)
     assert cfg["log_dir"] == Path.home() / "custom-logs"
     assert cfg["screenshot_dir"] == Path.home() / "custom-shots"
+    assert cfg["trace_dir"] == Path.home() / "custom-traces"
+    assert cfg["task_dir"] == Path.home() / "custom-tasks"
     assert cfg["safety"]["sensitive_processes"] == ["myapp"]
     assert cfg["safety"]["sensitive_window_classes"] == ["MyClass"]
     assert cfg["safety"]["screenshot_sensitive_window_check"] is False
@@ -48,6 +54,7 @@ def test_load_config_uses_environment_override(tmp_path: Path, monkeypatch) -> N
     path.write_text(
         """
 trace_dir: ~/env-traces
+task_dir: ~/env-tasks
 display:
   default_monitor: 2
 """,
@@ -59,6 +66,7 @@ display:
     cfg = config.load_config()
 
     assert cfg["trace_dir"] == Path.home() / "env-traces"
+    assert cfg["task_dir"] == Path.home() / "env-tasks"
     assert cfg["display"]["default_monitor"] == 2
 
 

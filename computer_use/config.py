@@ -18,6 +18,7 @@ _DEFAULTS: dict[str, Any] = {
     "log_dir": Path.home() / ".kimi-code" / "logs",
     "screenshot_dir": Path.home() / ".kimi-code" / "mcp" / "computer-use" / "screenshots",
     "trace_dir": Path.home() / ".computer-use" / "traces",
+    "task_dir": Path.home() / ".computer-use" / "tasks",
     "safety": {
         "sensitive_processes": [],
         "sensitive_window_classes": [],
@@ -42,6 +43,7 @@ def _load_config(path: Path | None = None) -> dict[str, Any]:
         "log_dir": _expand_user(_DEFAULTS["log_dir"]),
         "screenshot_dir": _expand_user(_DEFAULTS["screenshot_dir"]),
         "trace_dir": _expand_user(_DEFAULTS["trace_dir"]),
+        "task_dir": _expand_user(_DEFAULTS["task_dir"]),
         "safety": dict(_DEFAULTS["safety"]),
         "display": dict(_DEFAULTS["display"]),
     }
@@ -63,6 +65,9 @@ def _load_config(path: Path | None = None) -> dict[str, Any]:
 
     if "trace_dir" in data:
         config["trace_dir"] = Path(_expand_user(data["trace_dir"]))
+
+    if "task_dir" in data:
+        config["task_dir"] = Path(_expand_user(data["task_dir"]))
 
     safety = data.get("safety", {})
     config["safety"]["sensitive_processes"] = list(

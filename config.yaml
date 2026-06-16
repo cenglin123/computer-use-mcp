@@ -5,6 +5,7 @@
 log_dir: ~/.kimi-code/logs
 screenshot_dir: ~/.kimi-code/mcp/computer-use/screenshots
 trace_dir: ~/.computer-use/traces
+task_dir: ~/.computer-use/tasks
 
 safety:
   # List of additional process names to treat as sensitive.
