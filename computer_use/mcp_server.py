@@ -1161,9 +1161,7 @@ def _dispatch_tool(
 
 def _save_ui_snapshot(snapshot: dict[str, Any], trace_id: str) -> str:
     """Persist a snapshot dict to disk and return its file path."""
-    root = trace_module.trace_root(trace_id)
-    snapshot_dir = root / "snapshots"
-    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_dir = trace_module.artifact_dir(trace_id, "snapshots")
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     path = snapshot_dir / f"snapshot_{timestamp}.json"
     path.write_text(json.dumps(snapshot, ensure_ascii=False), encoding="utf-8")

@@ -35,6 +35,7 @@ _WINDOWS_DEVICE_NAMES = {
     *(f"LPT{index}" for index in range(1, 10)),
 }
 _SENSITIVE_INPUT_KEYS = {"text", "value", "password", "secret"}
+_ARTIFACT_KINDS = {"screenshots", "snapshots"}
 
 
 def generate_trace_id() -> str:
@@ -65,13 +66,20 @@ def validate_trace_id(trace_id: str) -> str:
 
 
 def trace_root(trace_id: str) -> Path:
-    """Return ``<trace_dir>/<trace_id>`` creating sub-dirs."""
+    """Return ``<trace_dir>/<trace_id>`` creating the trace root only."""
     validate_trace_id(trace_id)
     root = trace_dir() / trace_id
     root.mkdir(parents=True, exist_ok=True)
-    (root / "screenshots").mkdir(exist_ok=True)
-    (root / "snapshots").mkdir(exist_ok=True)
     return root
+
+
+def artifact_dir(trace_id: str, kind: str) -> Path:
+    """Return a trace artifact subdirectory, creating only the requested kind."""
+    if kind not in _ARTIFACT_KINDS:
+        raise ValueError(f"Invalid artifact kind: {kind}")
+    path = trace_root(trace_id) / kind
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def write_trace_meta(trace_id: str, goal: str | None = None) -> Path:

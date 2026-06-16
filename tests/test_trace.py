@@ -54,6 +54,23 @@ def test_record_step_writes_trace_file(tmp_trace_dir: Path) -> None:
     assert trace_file.exists()
 
 
+def test_trace_root_does_not_precreate_artifact_directories(
+    tmp_trace_dir: Path,
+) -> None:
+    root = trace.trace_root("empty-artifacts")
+
+    assert root.is_dir()
+    assert not (root / "screenshots").exists()
+    assert not (root / "snapshots").exists()
+
+
+def test_artifact_dir_creates_only_requested_kind(tmp_trace_dir: Path) -> None:
+    screenshots = trace.artifact_dir("lazy-artifacts", "screenshots")
+
+    assert screenshots.is_dir()
+    assert not (screenshots.parent / "snapshots").exists()
+
+
 def test_read_trace_returns_empty_for_missing_trace(tmp_trace_dir: Path) -> None:
     assert trace.read_trace("does-not-exist") == []
 
