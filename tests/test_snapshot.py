@@ -296,10 +296,12 @@ def test_get_ui_snapshot_screenshot_uses_trace_screenshots_dir(
         trace_id="snapshot-trace",
     )
 
-    assert Path(result["screenshot_path"]).parent == (
-        tmp_path / "snapshot-trace" / "screenshots"
+    assert Path(result["screenshot_path"]).parent == trace_module.artifact_dir(
+        "snapshot-trace", "screenshots"
     )
-    assert not (tmp_path / "snapshot-trace" / "snapshots").exists()
+    trace_root = trace_module.resolve_trace_root("snapshot-trace")
+    assert trace_root is not None
+    assert not (trace_root / "snapshots").exists()
 
 
 def test_click_by_uid_success(monkeypatch, _fake_tree) -> None:

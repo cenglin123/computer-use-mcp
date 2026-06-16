@@ -715,6 +715,11 @@ def _error_kind_for_result(error_value: Any) -> str:
     return "unknown"
 
 
+def _is_fail_safe_exception(exc: BaseException) -> bool:
+    """Detect PyAutoGUI fail-safe even if the module was re-imported."""
+    return exc.__class__.__name__ == "FailSafeException"
+
+
 def _failure_for_result(result: Any) -> tuple[str, str] | None:
     """Return ``(error_kind, message)`` for a structured failed result."""
     if not isinstance(result, dict):
@@ -821,11 +826,17 @@ def _call_tool(
             {"error": "fail_safe", "detail": "PyAutoGUI fail-safe triggered"}
         )
     except Exception as exc:
-        logging.error(
-            "tool error: %s",
-            trace_module.sanitize_message(args, str(exc)),
-        )
-        error = exc
+        if _is_fail_safe_exception(exc):
+            logging.warning("pyautogui fail-safe: %s", exc)
+            payload = json.dumps(
+                {"error": "fail_safe", "detail": "PyAutoGUI fail-safe triggered"}
+            )
+        else:
+            logging.error(
+                "tool error: %s",
+                trace_module.sanitize_message(args, str(exc)),
+            )
+            error = exc
     finally:
         duration_ms = int((time.perf_counter() - start) * 1000)
         if payload is not None:
