@@ -63,6 +63,12 @@
 #### 变更内容
 - 补充 Computer Use MCP 的能力边界：视觉 GUI 操作需要可读取本地 PNG 截图的多模态模型；纯文本模型只能可靠使用结构化查询、审计和维护类工具。
 
+### docs: 增加 Computer Use MCP agent 使用指南
+
+#### 变更内容
+- 新增配套 Skill 与通用 agent prompt，明确多模态能力边界、GUI 操作闭环、安全纪律、batch/task/trace 使用方式，便于非 Kimi 客户端正确接入。
+
+
 
 
 

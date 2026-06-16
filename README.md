@@ -63,6 +63,10 @@ args = ["-m", "computer_use.mcp_server"]
 
 Replace the path with the absolute path where you cloned this server. The server itself does not depend on a specific MCP client.
 
+## Agent guidance
+
+Agents that support Skills can load [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md) for safe operating discipline. Generic MCP clients can use [docs/agent-usage.md](docs/agent-usage.md) as a prompt snippet.
+
 ## Coordinate system
 
 All tool coordinates are **physical virtual screen pixels** (mss coordinates).

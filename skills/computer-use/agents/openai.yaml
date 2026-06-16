@@ -1,0 +1,13 @@
+interface:
+  display_name: "Computer Use MCP"
+  short_description: "Operate Windows GUI through Computer Use MCP"
+  default_prompt: "Use $computer-use to operate a Windows desktop application safely through the Computer Use MCP server."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "computer-use"
+      description: "Local Computer Use MCP server for Windows screenshots, UIA, mouse, keyboard, task sessions, and trace review."
+
+policy:
+  allow_implicit_invocation: true
