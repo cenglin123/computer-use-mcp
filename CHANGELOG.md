@@ -13,6 +13,12 @@
 #### 变更内容
 - 新增 MCP prompts、安装 doctor、只读 smoke、通用客户端示例和分发就绪测试，让用户注册 MCP 后可直接发现正确使用路径；强化工具描述和错误 next_action，降低纯文本模型误用与盲点操作风险。
 
+### docs: README 增加中文 MCP 使用说明
+
+#### 变更内容
+- 在 README 中补充中文端到端使用流程，覆盖 doctor 自检、客户端注册、guidance/Skill 加载、只读 smoke、真实 GUI 任务闭环和多模态模型限制。
+
+
 ---
 
 ## 2026-06-16

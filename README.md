@@ -78,6 +78,74 @@ Replace the path with the absolute path where you cloned this server. The server
 
 Prefer MCP prompt `computer_use_guidance` when your client supports prompts. Agents that support Skills can load [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md) for safe operating discipline. Generic MCP clients can use [docs/agent-usage.md](docs/agent-usage.md) or [examples/clients/agent-prompt.md](examples/clients/agent-prompt.md) as a prompt snippet.
 
+## 如何使用该 MCP 工具
+
+这个 MCP 适合让多模态 AI Agent 操作 Windows 桌面应用。它本身不包含模型，也不替你规划任务；它只提供观察屏幕、读取 UIA 信息、控制鼠标键盘、记录 trace/task 的本地工具。
+
+推荐流程：
+
+1. 安装依赖后先运行自检：
+
+   ```powershell
+   python -m computer_use doctor
+   ```
+
+   确认输出为 JSON，且关键检查为 `ok`。如果只有 `model_capability` 是 `warning`，表示 MCP 环境可用，但执行视觉 GUI 任务仍需要多模态模型或客户端能读取本地 PNG 截图。
+
+2. 在你的 MCP 客户端中注册服务器：
+
+   ```json
+   {
+     "mcpServers": {
+       "computer-use": {
+         "command": "C:\\Project\\computer-use-mcp\\.venv\\Scripts\\python.exe",
+         "args": ["-m", "computer_use.mcp_server"]
+       }
+     }
+   }
+   ```
+
+   把 `command` 改成你本机仓库虚拟环境里的 Python 绝对路径。Kimi Code 可参考 [examples/clients/kimi-code.toml](examples/clients/kimi-code.toml)，通用客户端可参考 [examples/clients/generic-mcp.json](examples/clients/generic-mcp.json)。
+
+3. 让 Agent 读取使用指南：
+
+   - 如果客户端支持 MCP prompts，加载 `computer_use_guidance`。
+   - 如果客户端支持 Skills，加载 [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md)。
+   - 如果都不支持，把 [examples/clients/agent-prompt.md](examples/clients/agent-prompt.md) 的内容放进 Agent 系统提示或任务提示。
+
+4. 先做只读 smoke test，不要一上来点击或输入：
+
+   ```powershell
+   python tools\smoke_mcp_client.py --server .\.venv\Scripts\python.exe --args -m computer_use.mcp_server
+   ```
+
+   也可以让 Agent 先调用 `get_monitors`、`screenshot`、`get_ui_snapshot`、`start_task`、`review_task_session` 等只读或审计类工具，确认工具链能正常返回结果。
+
+5. 执行真实 GUI 任务时，按这个闭环走：
+
+   - `start_task(goal=...)` 创建业务任务会话，后续工具调用带上返回的 `task_id`。
+   - 先观察：优先 `screenshot` 和 `get_ui_snapshot`，不要凭空猜坐标。
+   - 再定位：能用 `find_control` / `click_control` 等 UIA 工具时优先用语义定位；UIA 不可用时再根据截图坐标操作。
+   - 再动作：多步操作优先用原生 `batch`，不要在 Bash/PowerShell 里手写脚本绕过 MCP。
+   - 再验证：每轮动作后截图或读取 snapshot，确认界面状态确实变化。
+   - 最后复盘：用 `review_task_session(task_id)` 查看 trace、截图、artifact，再 `finish_task(task_id, summary=...)` 结束任务。
+
+6. 给 Agent 的任务描述可以这样写：
+
+   ```text
+   使用 computer-use MCP 操作 Windows 桌面。请先 start_task 创建任务，
+   通过 screenshot/get_ui_snapshot 观察界面，优先使用 UIA 语义定位，
+   必要时再用坐标点击。每次真实输入后截图验证，最后 review_task_session
+   并 finish_task。不要扫描 ~/.computer-use/traces 猜测任务状态。
+   ```
+
+注意事项：
+
+- 视觉 GUI 任务必须使用多模态模型；纯文本模型不能可靠地根据截图决定点击位置。
+- `screenshot` 返回的是本地 PNG 路径，不返回 base64；客户端或模型必须能读取该文件。
+- 鼠标键盘是真实输入设备，运行前确认当前机器无人手动操作鼠标键盘。
+- 不要绕过 `safety.py` 的坐标和窗口安全检查；遇到 `next_action` 时优先按返回建议修正。
+
 ## Coordinate system
 
 All tool coordinates are **physical virtual screen pixels** (mss coordinates).
