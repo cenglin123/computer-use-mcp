@@ -58,6 +58,43 @@ def test_tools_listed() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("press_key", "press_key"),
+        ("computer-use_press_key", "press_key"),
+        ("mcp__computer-use__press_key", "press_key"),
+    ],
+)
+def test_normalize_nested_tool_name_accepts_known_names(raw, expected):
+    from computer_use.tool_contract import (
+        BATCH_ACTION_TOOL_NAMES,
+        normalize_nested_tool_name,
+    )
+
+    assert (
+        normalize_nested_tool_name(raw, allowed_tools=BATCH_ACTION_TOOL_NAMES)
+        == expected
+    )
+
+
+def test_normalize_nested_tool_name_rejects_unknown_name():
+    from computer_use.tool_contract import (
+        BATCH_ACTION_TOOL_NAMES,
+        InvalidToolName,
+        normalize_nested_tool_name,
+    )
+
+    with pytest.raises(InvalidToolName) as exc:
+        normalize_nested_tool_name(
+            "computer-use_press_keey",
+            allowed_tools=BATCH_ACTION_TOOL_NAMES,
+        )
+
+    assert exc.value.requested_tool == "computer-use_press_keey"
+    assert "press_key" in exc.value.candidates
+
+
 def test_get_monitors() -> None:
     result = _call_tool("get_monitors", {})
     data = json.loads(result)
