@@ -99,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("size", help="Output virtual screen size as JSON")
     sub.add_parser("monitors", help="Output monitor list as JSON")
+    sub.add_parser("doctor", help="Run installation diagnostics and benign write probe as JSON")
 
     p_click = sub.add_parser("click", help="Click at primary-screen physical coordinates")
     p_click.add_argument("x", type=int)
@@ -148,6 +149,13 @@ def main(argv: list[str] | None = None) -> int:
     p_rebuild.add_argument("--dry-run", action="store_true")
 
     args = parser.parse_args(argv)
+
+    if args.cmd == "doctor":
+        from computer_use import doctor
+
+        result = doctor.run_doctor()
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result["status"] != "failed" else 1
 
     if args.cmd == "tasks":
         from computer_use import review, task_session

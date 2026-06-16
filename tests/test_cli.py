@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from types import SimpleNamespace
 
@@ -79,3 +80,55 @@ def test_cli_module_import_does_not_load_pyautogui() -> None:
     assert result.stdout.strip() == "True", (
         f"cli module import loaded input-device dependencies:\n{result.stderr}"
     )
+
+
+def test_doctor_module_import_does_not_load_pyautogui_or_core() -> None:
+    """Importing computer_use.doctor must not load input-device modules."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import computer_use.doctor; "
+                "import sys; "
+                "print('pyautogui' in sys.modules, "
+                "'computer_use.core' in sys.modules)"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == "False False", result.stdout + result.stderr
+
+
+def test_cli_doctor_outputs_json_without_input_device_import(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    sys.modules.pop("pyautogui", None)
+    sys.modules.pop("computer_use.core", None)
+
+    from computer_use import doctor
+
+    monkeypatch.setattr(
+        doctor,
+        "run_doctor",
+        lambda: {
+            "status": "ok",
+            "checks": [
+                {"name": "python", "status": "ok"},
+                {"name": "model_capability", "status": "warning"},
+            ],
+            "next_steps": ["Register the MCP server", "Load computer_use_guidance"],
+        },
+    )
+
+    exit_code = cli.main(["doctor"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert output["status"] == "ok"
+    assert "pyautogui" not in sys.modules
+    assert "computer_use.core" not in sys.modules
