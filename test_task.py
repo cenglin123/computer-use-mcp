@@ -7,7 +7,7 @@ This script:
 4. Takes a virtual-desktop screenshot.
 5. If a secondary monitor exists, clicks its center and takes a screenshot.
 
-All screenshots are saved to ~/.kimi-code/logs/ for manual verification.
+All screenshots are saved to ~/.computer-use/logs/ for manual verification.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from computer_use.safety import SafetyError, validate_text_input
 
 
 def save_screenshot(b64_data: str, name: str) -> Path:
-    out = Path.home() / ".kimi-code" / "logs" / name
+    out = Path.home() / ".computer-use" / "logs" / name
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "wb") as f:
         f.write(base64.b64decode(b64_data))
@@ -65,7 +65,7 @@ def main() -> int:
     click(center_x, center_y)
     time.sleep(0.2)
 
-    text = "Hello from Kimi Computer Use!"
+    text = "Hello from Computer Use MCP!"
     print(f"Typing: {text}")
     type_text(text)
     time.sleep(0.2)

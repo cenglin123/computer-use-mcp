@@ -53,6 +53,12 @@
 #### 变更内容
 - 补齐 run_task_plan 嵌套工具 Schema enum，延迟 CLI inspect_point 导入避免只读审计加载 pyautogui，并关闭 trace 归属冲突时创建的 standalone task。
 
+### feat: 通用化 MCP 客户端支持
+
+#### 变更内容
+- 将运行时默认配置、日志和截图目录迁移到 ~/.computer-use，保留旧 Kimi 配置路径兼容回退；更新 README、部署和 API 文档，明确该服务可由任意 stdio MCP 客户端注册使用。
+
+
 
 
 

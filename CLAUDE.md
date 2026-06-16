@@ -34,8 +34,8 @@
 ## 项目记忆
 
 - **用户**：中文交互；偏好先规划再执行，重要任务走 converge 评审；关注工具执行效率与安全性。
-- **项目上下文**：Windows GUI 自动化 MCP；核心为 `pyautogui` + 可选 `uiautomation`；模型直接读图，无 OCR 工具；截图只返回路径，`batch.final_screenshot` 默认关闭。
-- **关键教训**：优先模型视觉、UIA 和 Shell 启动；自绘界面需回退视觉定位；等待优先事件工具，必要时 `sleep`；长任务用原生 `batch` 降低往返；MCP 只做键鼠宏和观察，规划留给上层 ReAct；桌面图标用 `LVM_GETITEMPOSITION` 精确定位；直接调用 `mcp__computer-use__*`，不写 Python 包装 `_call_tool`。
+- **项目上下文**：通用 Windows GUI 自动化 MCP；核心为 `pyautogui` + 可选 `uiautomation`；无 OCR；截图只返回路径，`batch.final_screenshot` 默认关闭；默认状态根目录 `~/.computer-use/`。
+- **关键教训**：优先模型视觉、UIA 和 Shell 启动；自绘界面回退视觉定位；等待优先事件工具，必要时 `sleep`；长任务用原生 `batch`；MCP 只做键鼠宏和观察；桌面图标用 `LVM_GETITEMPOSITION`；直接调用客户端暴露的 `computer-use` 工具，不写 Python 包装 `_call_tool`。
 - **详细记忆**：[.agent/memory/MEMORY.md](.agent/memory/MEMORY.md)
 
 > 每次更新 `.agent/memory/` 后，同步维护本节摘要。

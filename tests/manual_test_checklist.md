@@ -1,7 +1,7 @@
 # Computer Use 手动测试清单
 
 > 本清单覆盖 Computer Use 的常见任务场景，用于验证截图、键鼠控制、安全策略、多显示器等核心能力。
-> 临时截图统一保存到 `~/.kimi-code/logs/`，避免污染桌面。
+> 临时截图统一保存到 `~/.computer-use/logs/`，避免污染桌面。
 
 ---
 
@@ -88,15 +88,15 @@
 
 | # | 测试项 | 调用方式 | 预期结果 | 验收方式 |
 |---|--------|----------|----------|----------|
-| 8.1 | `screenshot` | Kimi Code CLI 调用（默认） | 返回 JSON 含 `saved_path`/`timestamp`，不含 base64 | 检查文件已保存 |
-| 8.1a | `screenshot(save_path=...)` | Kimi Code CLI 调用 | PNG 保存到指定路径并返回路径 | 检查文件存在 |
-| 8.2 | `get_monitors` | Kimi Code CLI 调用 | 返回显示器列表 JSON | 检查数组长度 |
-| 8.3 | `batch`（默认） | Kimi Code CLI 调用 | 返回每步结果（含 `timestamp`），不含 `final_screenshot` | 检查返回值 |
-| 8.4 | `batch(final_screenshot=true)` | Kimi Code CLI 调用 | 返回每步结果及最终截图路径引用 | 检查 `final_screenshot.saved_path` 存在 |
-| 8.4 | `click` | Kimi Code CLI 调用 | 执行点击，返回成功 JSON | 检查返回值 |
-| 8.5 | `type` 危险文本 | Kimi Code CLI 调用 | 返回 `{"error": "..."}` | 检查返回值 |
-| 8.6 | `key_combo` | Kimi Code CLI 调用 | 执行组合键 | 目视 |
-| 8.7 | `sleep(duration=2)` | Kimi Code CLI 调用 | 等待 2 秒后返回 `{"slept": true, "duration": 2}` | 检查耗时与返回值 |
+| 8.1 | `screenshot` | 任意 MCP 客户端调用（默认） | 返回 JSON 含 `saved_path`/`timestamp`，不含 base64 | 检查文件已保存 |
+| 8.1a | `screenshot(save_path=...)` | 任意 MCP 客户端调用 | PNG 保存到指定路径并返回路径 | 检查文件存在 |
+| 8.2 | `get_monitors` | 任意 MCP 客户端调用 | 返回显示器列表 JSON | 检查数组长度 |
+| 8.3 | `batch`（默认） | 任意 MCP 客户端调用 | 返回每步结果（含 `timestamp`），不含 `final_screenshot` | 检查返回值 |
+| 8.4 | `batch(final_screenshot=true)` | 任意 MCP 客户端调用 | 返回每步结果及最终截图路径引用 | 检查 `final_screenshot.saved_path` 存在 |
+| 8.4 | `click` | 任意 MCP 客户端调用 | 执行点击，返回成功 JSON | 检查返回值 |
+| 8.5 | `type` 危险文本 | 任意 MCP 客户端调用 | 返回 `{"error": "..."}` | 检查返回值 |
+| 8.6 | `key_combo` | 任意 MCP 客户端调用 | 执行组合键 | 目视 |
+| 8.7 | `sleep(duration=2)` | 任意 MCP 客户端调用 | 等待 2 秒后返回 `{"slept": true, "duration": 2}` | 检查耗时与返回值 |
 
 ---
 
@@ -136,7 +136,7 @@
 
 | 日期 | 测试人 | 通过项 | 失败项 | 备注 |
 |------|--------|--------|--------|------|
-| 2026-06-13 | Kimi Code CLI | 1.1, 1.2, 2.1, 2.2, 2.3, 3.2, 3.3, 4.5, 6.1, 6.2, 6.3, 7.1, 10.1 | 无 | pytest 39 passed；截图尺寸正确；危险文本/越界坐标正确拦截；副屏点击和截图验证通过（check_monitor2.png 显示副屏内容） |
+| 2026-06-13 | Kimi Code CLI | 1.1, 1.2, 2.1, 2.2, 2.3, 3.2, 3.3, 4.5, 6.1, 6.2, 6.3, 7.1, 10.1 | 无 | 历史执行记录：pytest 39 passed；截图尺寸正确；危险文本/越界坐标正确拦截；副屏点击和截图验证通过（check_monitor2.png 显示副屏内容） |
 
 ### 详细执行证据
 
@@ -212,7 +212,7 @@ PASS: Coordinate (2000, 5) falls in a virtual screen gap and is not on any monit
 
 ## 注意事项
 
-1. 所有临时截图保存到 `~/.kimi-code/logs/`，不要保存到桌面。
+1. 所有临时截图保存到 `~/.computer-use/logs/`，不要保存到桌面。
 2. 涉及 GUI 操作的测试需要人工目视确认。
 3. 安全拦截测试应使用无害但命中规则的文字，不要真的执行危险命令。
 4. 多显示器测试需要在多屏环境下执行。

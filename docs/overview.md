@@ -9,7 +9,7 @@
 
 ## 架构主线
 
-MCP 客户端（如 Claude Desktop、Kimi Code）通过 stdio/SSE 调用本服务器的 tools → `mcp_server.py` 解析请求 → `core.py` 执行截图/鼠标/键盘/滚动操作，**截图保存为本地 PNG 文件并只返回文件路径引用**，模型通过 `ReadMediaFile` 等多模态工具读取图像 → 返回操作结果。
+MCP 客户端（如 Claude Desktop、Codex、Kimi Code 或其他支持 stdio MCP 的客户端）调用本服务器的 tools → `mcp_server.py` 解析请求 → `core.py` 执行截图/鼠标/键盘/滚动操作，**截图保存为本地 PNG 文件并只返回文件路径引用**，模型通过客户端提供的多模态文件读取能力按需读取图像 → 返回操作结果。
 
 `ui_automation.py` 作为可选补充，用于在坐标点击之外直接获取控件信息，提高稳定性。`snapshot.py` 在 UIA 可用时生成结构化控件树快照，让模型可以凭 UID 操作控件，跳过反复截图估算坐标。`trace.py` 记录每次调用的步骤、结果、耗时和错误，支持事后复盘。`safety.py` 为公开执行入口提供主屏坐标、目标窗口和输入内容检查；`core.py` 在最终输入原语再次强制主屏坐标边界，避免直接调用绕过。
 

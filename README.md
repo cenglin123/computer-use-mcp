@@ -1,10 +1,10 @@
-# Computer Use for Kimi Code CLI
+# Computer Use MCP
 
-A local MCP Server that gives Kimi Code CLI the ability to see and control your Windows desktop through screenshots and mouse/keyboard actions.
+A local MCP server that gives AI agents the ability to see and control a Windows desktop through screenshots, UI Automation, and mouse/keyboard actions.
 
 ## What it does
 
-- Takes screenshots of your full virtual desktop (all monitors) and returns them as base64 PNG.
+- Takes screenshots of your desktop and returns saved local file paths to MCP clients.
 - Can also capture a single monitor via the `monitor` parameter.
 - Clicks, moves, scrolls, and types at physical virtual screen coordinates.
 - Presses key combinations like `ctrl+c`.
@@ -32,17 +32,32 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
-## Register with Kimi Code CLI
+## Register with an MCP Client
 
-Add the following to your `~/.kimi-code/config.toml`:
+Use the Python interpreter from this checkout's virtual environment and run the server module over stdio.
+
+Generic MCP client shape:
+
+```json
+{
+  "mcpServers": {
+    "computer-use": {
+      "command": "C:\\Project\\computer-use-mcp\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "computer_use.mcp_server"]
+    }
+  }
+}
+```
+
+Kimi Code TOML shape:
 
 ```toml
 [mcp.servers.computer-use]
-command = "C:\\Users\\<user>\\.kimi-code\\mcp\\computer-use\\.venv\\Scripts\\python.exe"
+command = "C:\\Project\\computer-use-mcp\\.venv\\Scripts\\python.exe"
 args = ["-m", "computer_use.mcp_server"]
 ```
 
-Replace `<user>` with your Windows username, or use the absolute path where you cloned this server.
+Replace the path with the absolute path where you cloned this server. The server itself does not depend on a specific MCP client.
 
 ## Coordinate system
 
@@ -63,8 +78,7 @@ will fail fast in the MVP.
 
 | Tool | Description |
 |------|-------------|
-| `screenshot` | Capture the virtual desktop (or a single monitor) as base64 PNG. |
-| `get_screen_size` | Return virtual screen size (width, height). |
+| `screenshot` | Capture the virtual desktop or one monitor and return a saved PNG path. |
 | `get_monitors` | Return all monitors with index, primary flag, and bounds. |
 | `click` | Click at physical virtual screen coordinates. |
 | `move_to` | Move cursor to physical virtual screen coordinates. |
@@ -75,7 +89,7 @@ will fail fast in the MVP.
 ## Local debug CLI
 
 ```powershell
-# Screenshot to stdout (base64)
+# Screenshot to stdout (base64, debug CLI only)
 python -m computer_use screenshot
 
 # Screenshot a single monitor
@@ -108,16 +122,18 @@ python -m computer_use key ctrl c
 - Dangerous shell commands and file deletions are blocked.
 - Password controls are detected via UI Automation and refused.
 - Sensitive application processes/window classes are blocked.
-- All actions are logged to `~/.kimi-code/logs/computer-use.log` with rotation.
+- All actions are logged to `~/.computer-use/logs/computer-use.log` with rotation by default.
 
 ## Configuration
 
-Edit `config.yaml` in this directory to customize logging directory and safety
-lists. Set `display.default_monitor` to `0` (virtual desktop) or a 1-based
-monitor index to change the default screenshot target.
+Runtime configuration defaults to `~/.computer-use/config.yaml`. Set
+`COMPUTER_USE_CONFIG` to point at another YAML file, or pass an explicit config
+path in code. For compatibility, if the new default config does not exist but
+the legacy `~/.kimi-code/mcp/computer-use/config.yaml` exists, it is still read.
 
-The `~/.kimi-code/config.toml` file is used only to register the server
-with Kimi Code CLI.
+Use `config.yaml` in this repository as a template to customize logging,
+screenshot, trace, task, display, and safety settings. MCP client config files
+are only for registering the server process with that client.
 
 ## 文档
 

@@ -9,14 +9,15 @@ from typing import Any
 import yaml
 
 
-DEFAULT_CONFIG_PATH = (
+DEFAULT_CONFIG_PATH = Path.home() / ".computer-use" / "config.yaml"
+LEGACY_CONFIG_PATH = (
     Path.home() / ".kimi-code" / "mcp" / "computer-use" / "config.yaml"
 )
 
 
 _DEFAULTS: dict[str, Any] = {
-    "log_dir": Path.home() / ".kimi-code" / "logs",
-    "screenshot_dir": Path.home() / ".kimi-code" / "mcp" / "computer-use" / "screenshots",
+    "log_dir": Path.home() / ".computer-use" / "logs",
+    "screenshot_dir": Path.home() / ".computer-use" / "screenshots",
     "trace_dir": Path.home() / ".computer-use" / "traces",
     "task_dir": Path.home() / ".computer-use" / "tasks",
     "safety": {
@@ -91,6 +92,12 @@ def _load_config(path: Path | None = None) -> dict[str, Any]:
     return config
 
 
+def _default_config_path() -> Path:
+    if DEFAULT_CONFIG_PATH.exists() or not LEGACY_CONFIG_PATH.exists():
+        return DEFAULT_CONFIG_PATH
+    return LEGACY_CONFIG_PATH
+
+
 _config_cache: dict[str, Any] | None = None
 
 
@@ -105,9 +112,8 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     if _config_cache is None:
         selected_path = path
         if selected_path is None:
-            selected_path = Path(
-                os.environ.get("COMPUTER_USE_CONFIG", DEFAULT_CONFIG_PATH)
-            )
+            configured = os.environ.get("COMPUTER_USE_CONFIG")
+            selected_path = Path(configured) if configured else _default_config_path()
         _config_cache = _load_config(selected_path)
     return _config_cache
 

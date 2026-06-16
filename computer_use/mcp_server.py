@@ -1,4 +1,4 @@
-"""MCP Server exposing Computer Use tools to Kimi Code CLI."""
+"""MCP Server exposing Computer Use tools to MCP clients."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ from computer_use.tool_contract import (
 
 def _setup_logging(log_dir: Path | None = None) -> None:
     if log_dir is None:
-        log_dir = load_config().get("log_dir", Path.home() / ".kimi-code" / "logs")
+        log_dir = load_config().get("log_dir", Path.home() / ".computer-use" / "logs")
     log_dir = Path(log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / "computer-use.log"

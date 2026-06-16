@@ -19,7 +19,7 @@
 
 多模态模型已经能直接读图，因此不再提供 OCR 工具；需要精确文字时让模型直接看图识别即可。
 
-**上下文保护原则**：`screenshot` 始终将 PNG 保存到本地目录，上下文只保留文件路径引用，绝不返回 base64 图像。默认保存到 `~/.kimi-code/mcp/computer-use/screenshots/`；显式 `save_path` 必须位于配置的 `screenshot_dir` 内，不能使用 `..`、UNC、盘符相对路径或目录本身逃逸。`batch` 的 `final_screenshot` 默认关闭。
+**上下文保护原则**：`screenshot` 始终将 PNG 保存到本地目录，上下文只保留文件路径引用，绝不返回 base64 图像。默认保存到 `~/.computer-use/screenshots/`；显式 `save_path` 必须位于配置的 `screenshot_dir` 内，不能使用 `..`、UNC、盘符相对路径或目录本身逃逸。`batch` 的 `final_screenshot` 默认关闭。
 
 ## 工具分类
 

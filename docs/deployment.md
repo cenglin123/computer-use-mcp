@@ -7,7 +7,7 @@
 | 变量 | 用途 | 必填 | 备注 |
 |------|------|------|------|
 | `PYTHONUTF8` | 强制 Python UTF-8 模式 | ❌ | Windows 中文环境下建议设为 `1`，避免终端乱码 |
-| `COMPUTER_USE_CONFIG` | 覆盖默认配置文件路径 | ❌ | 显式代码参数优先；否则读取该变量；最后回退到 `~/.kimi-code/mcp/computer-use/config.yaml` |
+| `COMPUTER_USE_CONFIG` | 覆盖默认配置文件路径 | ❌ | 显式代码参数优先；否则读取该变量；最后读取 `~/.computer-use/config.yaml`；若新默认文件不存在但旧 `~/.kimi-code/mcp/computer-use/config.yaml` 存在，则兼容读取旧路径 |
 
 ## 启动方式
 
@@ -36,7 +36,8 @@ python -m computer_use click 100 100
 
 ```json
 {
-  "command": ["python", "-m", "computer_use.mcp_server"]
+  "command": "C:\\Project\\computer-use-mcp\\.venv\\Scripts\\python.exe",
+  "args": ["-m", "computer_use.mcp_server"]
 }
 ```
 
@@ -45,6 +46,7 @@ python -m computer_use click 100 100
 ## 持久化与备份
 
 - 本项目无持久化数据库。截图保存到配置的 `screenshot_dir`，MCP 响应只返回本地路径，不返回 base64。
+- 新安装默认配置根目录为 `~/.computer-use/`：日志写入 `logs/`，截图写入 `screenshots/`，trace 写入 `traces/`，业务任务写入 `tasks/`。
 - `screenshot.save_path` 只能指向 `screenshot_dir` 内已存在的父目录，不能写入任意文件系统位置。
 - trace 保存到配置的 `trace_dir`，默认 `~/.computer-use/traces/`。`batch`、`run_task_plan` 和 `review_task` 响应中的 `trace_path`、`artifact_root`、`artifacts` 是审计入口；不要依赖目录名推断产物。
 - 新 trace 写入 `trace_dir/YYYY/MM/DD/<trace_id>/`。目录分区使用创建时的本地系统日期；JSON 时间字段使用带时区的 ISO 8601。旧 `<trace_dir>/<trace_id>/` 扁平 trace 保持只读兼容，不自动迁移。

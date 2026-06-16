@@ -1,6 +1,6 @@
 """Take a screenshot of the primary monitor, summarize it, and save the summary to the Desktop.
 
-Temporary screenshot is saved to ~/.kimi-code/logs/ instead of the Desktop.
+Temporary screenshot is saved to ~/.computer-use/logs/ instead of the Desktop.
 """
 
 from __future__ import annotations
@@ -30,13 +30,13 @@ SUMMARY_TEMPLATE = """主屏内容总结
 
 页面右侧显示该 UP 主的"先秦史"播放列表，包含多个历史类视频推荐。
 
-任务栏显示多个已打开的应用程序，包括浏览器、Kimi Code 等。
+任务栏显示多个已打开的应用程序，包括浏览器、编辑器等。
 """
 
 
 def main() -> int:
     # 1. Save temporary screenshot to logs, NOT Desktop
-    logs_dir = Path.home() / ".kimi-code" / "logs"
+    logs_dir = Path.home() / ".computer-use" / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     screenshot_path = logs_dir / "main_screenshot.png"
 
