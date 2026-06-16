@@ -54,6 +54,11 @@ def test_tools_listed() -> None:
         "run_task_plan",
         "retry_step",
         "review_task",
+        "start_task",
+        "finish_task",
+        "get_task",
+        "list_tasks",
+        "review_task_session",
         "batch",
     }
 
@@ -199,6 +204,31 @@ def test_batch_response_exposes_authoritative_failure_summary():
     assert result["artifacts"]["snapshots"] == []
     assert result["artifacts"]["report"] is None
     assert result["trace_path"] is not None
+
+
+def test_start_task_tool_dispatches_task_session(tmp_path, monkeypatch):
+    import computer_use.task_session as task_session
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path)
+
+    data = json.loads(_call_tool("start_task", {"goal": "audit traces"}))
+
+    assert data["goal"] == "audit traces"
+    assert data["status"] == "active"
+    assert Path(data["task_path"]).is_dir()
+    assert "timestamp" in data
+
+
+def test_finish_task_tool_returns_task_not_found(tmp_path, monkeypatch):
+    import computer_use.task_session as task_session
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path)
+
+    data = json.loads(_call_tool("finish_task", {"task_id": "missing"}))
+
+    assert data["error"] == "task_not_found"
+    assert data["task_id"] == "missing"
+    assert "timestamp" in data
 
 
 def test_get_monitors() -> None:

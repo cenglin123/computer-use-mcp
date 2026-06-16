@@ -36,7 +36,17 @@ ATOMIC_AND_COMPOSITE_TOOL_NAMES = (
     "review_task",
 )
 
-_ORCHESTRATION_TOOL_NAMES = frozenset({"batch", "run_task_plan"})
+_ORCHESTRATION_TOOL_NAMES = frozenset(
+    {
+        "batch",
+        "run_task_plan",
+        "start_task",
+        "finish_task",
+        "get_task",
+        "list_tasks",
+        "review_task_session",
+    }
+)
 _DIAGNOSTIC_TOOL_NAMES = frozenset({"retry_step", "review_task"})
 
 BATCH_ACTION_TOOL_NAMES = tuple(

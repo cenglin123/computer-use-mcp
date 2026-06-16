@@ -547,6 +547,67 @@ TOOLS: list[Tool] = [
         },
     ),
     Tool(
+        name="start_task",
+        description="Start an explicit business task session and return task_id for subsequent tool calls.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "goal": {"type": "string", "description": "Business task goal."},
+            },
+            "required": ["goal"],
+        },
+    ),
+    Tool(
+        name="finish_task",
+        description="Finish a business task session. Final status is derived from registered traces.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string"},
+                "summary": {"type": "string"},
+                "cancel": {"type": "boolean", "default": False},
+            },
+            "required": ["task_id"],
+        },
+    ),
+    Tool(
+        name="get_task",
+        description="Return business task metadata and trace ownership records.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string"},
+            },
+            "required": ["task_id"],
+        },
+    ),
+    Tool(
+        name="list_tasks",
+        description="List business task sessions for audit.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "date": {"type": "string", "description": "Optional YYYY-MM-DD filter."},
+                "status": {
+                    "type": "string",
+                    "enum": ["active", "succeeded", "failed", "cancelled"],
+                },
+                "limit": {"type": "integer", "minimum": 1},
+            },
+        },
+    ),
+    Tool(
+        name="review_task_session",
+        description="Generate a deterministic multi-trace summary for a business task session.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string"},
+            },
+            "required": ["task_id"],
+        },
+    ),
+    Tool(
         name="batch",
         description=(
             "Execute a sequence of tools in a single call. This is the preferred way to run multi-step GUI workflows. "
@@ -763,6 +824,38 @@ def _call_tool(name: str, args: dict, trace_context: dict[str, Any] | None = Non
         data = _attach_trace_manifest(data, trace_id)
 
     return json.dumps(data)
+
+
+def _task_error(exc: Exception) -> dict[str, Any]:
+    from computer_use import task_session
+
+    if isinstance(exc, task_session.TaskNotFoundError):
+        return {"error": "task_not_found", "task_id": exc.task_id}
+    if isinstance(exc, task_session.TaskClosedError):
+        return {"error": "task_closed", "task_id": exc.task_id}
+    if isinstance(exc, task_session.TraceTaskConflictError):
+        return {
+            "error": "trace_task_conflict",
+            "task_id": exc.task_id,
+            "trace_id": exc.trace_id,
+            "existing_task_id": exc.existing_task_id,
+        }
+    raise exc
+
+
+def _review_task_session_result(task_id: str) -> dict[str, Any]:
+    from computer_use import task_session
+
+    task = task_session.get_task(task_id)
+    return {
+        "task_id": task_id,
+        "status": task["status"],
+        "goal": task.get("goal"),
+        "trace_count": task.get("trace_count", 0),
+        "failed_trace_count": task.get("failed_trace_count", 0),
+        "active_trace_count": task.get("active_trace_count", 0),
+        "traces": task.get("traces", []),
+    }
 
 
 def _dispatch_tool(
@@ -1177,6 +1270,40 @@ def _dispatch_tool(
     if name == "review_task":
         from computer_use import review
         result = review.review_task(trace_id=args["trace_id"])
+        return json.dumps(result)
+
+    if name in {
+        "start_task",
+        "finish_task",
+        "get_task",
+        "list_tasks",
+        "review_task_session",
+    }:
+        from computer_use import task_session
+
+        try:
+            if name == "start_task":
+                result = task_session.start_task(args["goal"])
+            elif name == "finish_task":
+                result = task_session.finish_task(
+                    args["task_id"],
+                    summary=args.get("summary"),
+                    cancel=args.get("cancel", False),
+                )
+            elif name == "get_task":
+                result = task_session.get_task(args["task_id"])
+            elif name == "list_tasks":
+                result = {
+                    "tasks": task_session.list_tasks(
+                        date=args.get("date"),
+                        status=args.get("status"),
+                        limit=args.get("limit"),
+                    )
+                }
+            else:
+                result = _review_task_session_result(args["task_id"])
+        except Exception as exc:
+            result = _task_error(exc)
         return json.dumps(result)
 
     raise ValueError(f"Unknown tool: {name}")
