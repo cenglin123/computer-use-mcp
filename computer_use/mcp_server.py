@@ -612,6 +612,8 @@ def _error_kind_for_result(error_value: Any) -> str:
         return "timeout"
     if text == "fail_safe":
         return "fail_safe"
+    if text == "invalid_tool":
+        return "invalid_tool"
     if text in {"uiautomation_not_available", "uiautomation_root_failed"}:
         return "uia_unavailable"
     if text == "sensitive_window_blocked":

@@ -164,6 +164,22 @@ def test_batch_returns_invalid_tool_with_candidates():
     assert result["failed_index"] == 0
 
 
+def test_invalid_tool_is_recorded_with_dedicated_error_kind():
+    import computer_use.mcp_server as server
+    import computer_use.trace as trace_module
+
+    result = json.loads(
+        server._call_tool(
+            "batch",
+            {"actions": [{"tool": "computer-use_press_keey", "args": {}}]},
+        )
+    )
+    records = trace_module.read_trace(result["trace_id"])
+
+    assert result["results"][0]["result"]["error"] == "invalid_tool"
+    assert records[-1]["error_kind"] == "invalid_tool"
+
+
 def test_get_monitors() -> None:
     result = _call_tool("get_monitors", {})
     data = json.loads(result)
