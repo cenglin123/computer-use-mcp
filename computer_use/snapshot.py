@@ -167,6 +167,7 @@ def get_ui_snapshot(
     include_screenshot: bool = False,
     save_path: str | None = None,
     snapshot_dir: str | None = None,
+    trace_id: str | None = None,
 ) -> dict[str, Any]:
     """Capture a structured UI Automation tree snapshot.
 
@@ -179,6 +180,9 @@ def get_ui_snapshot(
             timestamped file is created under ``snapshot_dir``.
         snapshot_dir: Directory for the screenshot. Defaults to
             ``<trace_dir>/snapshots``.
+        trace_id: Optional trace ID. When provided and no explicit screenshot
+            destination is set, screenshots are stored under that trace's
+            ``screenshots`` artifact directory.
 
     Returns:
         A dict describing the snapshot, or ``{"error": "uiautomation_not_available"}``.
@@ -248,7 +252,14 @@ def get_ui_snapshot(
             screenshot_dest = Path(save_path)
             screenshot_dest.parent.mkdir(parents=True, exist_ok=True)
         else:
-            dest_dir = _resolve_snapshot_dir(snapshot_dir)
+            if snapshot_dir:
+                dest_dir = _resolve_snapshot_dir(snapshot_dir)
+            elif trace_id:
+                from computer_use.trace import artifact_dir
+
+                dest_dir = artifact_dir(trace_id, "screenshots")
+            else:
+                dest_dir = _resolve_snapshot_dir(snapshot_dir)
             ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
             screenshot_dest = dest_dir / f"snapshot_{ts}.png"
 

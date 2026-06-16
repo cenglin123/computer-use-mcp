@@ -776,7 +776,11 @@ def _dispatch_tool(
         from computer_use import snapshot
         scope = args.get("scope", "foreground")
         include_screenshot = args.get("include_screenshot", False)
-        result = snapshot.get_ui_snapshot(scope, include_screenshot)
+        result = snapshot.get_ui_snapshot(
+            scope,
+            include_screenshot,
+            trace_id=trace_id,
+        )
         return json.dumps(result)
 
     if name == "screenshot":

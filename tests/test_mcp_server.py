@@ -1514,7 +1514,7 @@ def test_batch_capture_snapshot_includes_snapshot(monkeypatch, tmp_path):
     monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path)
     monkeypatch.setattr(server.time, "sleep", lambda d: None)
 
-    def fake_get_ui_snapshot(scope, include_screenshot):
+    def fake_get_ui_snapshot(scope, include_screenshot, trace_id=None):
         return {"scope": scope, "include_screenshot": include_screenshot, "controls": []}
 
     monkeypatch.setattr(snapshot_mod, "get_ui_snapshot", fake_get_ui_snapshot)
@@ -1544,8 +1544,8 @@ def test_get_ui_snapshot_tool_dispatch(monkeypatch, tmp_path):
 
     calls = []
 
-    def fake_get_ui_snapshot(scope, include_screenshot):
-        calls.append((scope, include_screenshot))
+    def fake_get_ui_snapshot(scope, include_screenshot, trace_id=None):
+        calls.append((scope, include_screenshot, trace_id))
         return {
             "screenshot_path": "C:/tmp/snap.png",
             "scope": scope,
@@ -1559,7 +1559,8 @@ def test_get_ui_snapshot_tool_dispatch(monkeypatch, tmp_path):
     assert data["screenshot_path"] == "C:/tmp/snap.png"
     assert data["scope"] == "desktop"
     assert data["include_screenshot"] is True
-    assert calls == [("desktop", True)]
+    assert calls[0][0:2] == ("desktop", True)
+    assert isinstance(calls[0][2], str)
 
 
 def test_composite_error_sets_error_kind_in_trace(monkeypatch, tmp_path):

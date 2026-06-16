@@ -9,11 +9,9 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from computer_use import snapshot, trace as trace_module
-from computer_use.config import load_config
 from computer_use.core import get_coordinate_system, save_screenshot
 from computer_use.mcp_server import (
     _call_tool,
@@ -59,9 +57,7 @@ def _step_screenshot(trace_id: str, step_index: int | str, monitor: int = 1) -> 
         from computer_use.safety import validate_monitor_index
 
         validate_monitor_index(monitor, len(cs.get_monitors()))
-        config = load_config()
-        screenshot_dir = Path(config["screenshot_dir"])
-        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        screenshot_dir = trace_module.artifact_dir(trace_id, "screenshots")
         timestamp = datetime.now(timezone.utc)
         filename = timestamp.strftime("%Y%m%dT%H%M%S_%f")[:-3]
         save_path = str(
@@ -168,7 +164,11 @@ def run_task_plan(
     final_state_path: str | None = None
     if final_state:
         try:
-            snapshot_result = snapshot.get_ui_snapshot(scope="foreground", include_screenshot=True)
+            snapshot_result = snapshot.get_ui_snapshot(
+                scope="foreground",
+                include_screenshot=True,
+                trace_id=trace_id,
+            )
             if isinstance(snapshot_result, dict) and "error" not in snapshot_result:
                 final_state_path = _save_ui_snapshot(snapshot_result, trace_id)
             elif isinstance(snapshot_result, dict):

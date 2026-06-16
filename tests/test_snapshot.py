@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -268,6 +269,37 @@ def test_get_ui_snapshot_screenshot_defaults_to_trace_dir(monkeypatch, _fake_tre
     result = snapshot_mod.get_ui_snapshot(include_screenshot=True, snapshot_dir=str(tmp_path))
     assert result["screenshot_path"].startswith(str(tmp_path))
     assert result["screenshot_path"].endswith(".png")
+
+
+def test_get_ui_snapshot_screenshot_uses_trace_screenshots_dir(
+    monkeypatch, tmp_path, _fake_tree
+) -> None:
+    import computer_use.trace as trace_module
+
+    monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path)
+    _stub_process_name(monkeypatch)
+    snapshot_mod.uia = MagicMock()
+    snapshot_mod.uia.GetForegroundControl.return_value = _fake_tree
+    monkeypatch.setattr(snapshot_mod.pyautogui, "position", lambda: (0, 0))
+    monkeypatch.setattr(snapshot_mod, "save_screenshot", lambda path, monitor=0: path)
+    monkeypatch.setattr(
+        snapshot_mod,
+        "get_monitors",
+        lambda: [
+            SimpleNamespace(index=1, primary=True, left=0, top=0, width=1920, height=1080)
+        ],
+    )
+
+    result = snapshot_mod.get_ui_snapshot(
+        scope="foreground",
+        include_screenshot=True,
+        trace_id="snapshot-trace",
+    )
+
+    assert Path(result["screenshot_path"]).parent == (
+        tmp_path / "snapshot-trace" / "screenshots"
+    )
+    assert not (tmp_path / "snapshot-trace" / "snapshots").exists()
 
 
 def test_click_by_uid_success(monkeypatch, _fake_tree) -> None:
