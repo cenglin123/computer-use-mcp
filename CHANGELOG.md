@@ -23,6 +23,24 @@
 #### 变更内容
 - 截图保存前叠加红色十字与中心圆点，单显示器截图按显示器偏移换算；补充像素级回归测试和设计/API 说明。归档 20260614 项目验收状态，并清理会话导出、HiBit 临时脚本和本地 PaddleOCR 源码副本。无接口迁移。
 
+### docs: 规划 MCP 契约与产物诊断演进
+
+#### 变更内容
+- 新增 nested 工具名规范化、invalid_tool 分类、trace artifact manifest、惰性目录和权威执行摘要的实施计划；将已完成的 smart-executor-and-trace 计划从 active 归档到 completed。无运行时变更。
+
+### docs: 规划业务任务会话审计
+
+#### 变更内容
+- 新增独立实施计划，定义 task_id 业务任务边界、日期分区 trace、可重建定位索引、standalone 兼容和任务级审计流程；与正在审计的 MCP 契约计划串行实施。
+
+### fix: 强化 batch 契约与 trace 产物报告
+
+#### 变更内容
+- 统一 nested 工具 canonical 名称与 invalid_tool 分类，新增 trace artifact manifest 和响应证据字段，自动截图/快照绑定 trace，避免执行侧混淆目录用途或误报产物。
+
+
+
+
 
 
 ---

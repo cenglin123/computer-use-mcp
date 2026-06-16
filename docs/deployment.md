@@ -46,6 +46,8 @@ python -m computer_use click 100 100
 
 - 本项目无持久化数据库。截图保存到配置的 `screenshot_dir`，MCP 响应只返回本地路径，不返回 base64。
 - `screenshot.save_path` 只能指向 `screenshot_dir` 内已存在的父目录，不能写入任意文件系统位置。
+- trace 保存到配置的 `trace_dir`，默认 `~/.computer-use/traces/`。`batch`、`run_task_plan` 和 `review_task` 响应中的 `trace_path`、`artifact_root`、`artifacts` 是审计入口；不要依赖目录名推断产物。
+- trace 上下文内的自动截图 PNG 位于 `<trace_id>/screenshots/`，UI-tree JSON 位于 `<trace_id>/snapshots/`。无 trace 上下文的独立 snapshot 截图仍使用全局 `<trace_dir>/snapshots/` 回退目录，历史文件不迁移。
 - `config.yaml` 若包含敏感配置，应通过环境变量或本地 `.env` 覆盖，不要提交到版本库。
 
 ## 部署陷阱

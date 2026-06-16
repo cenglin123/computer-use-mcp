@@ -1,5 +1,13 @@
 # 计划：Computer Use MCP 智能化执行与复盘系统
 
+## 完成状态
+
+- 状态：已完成。
+- 实现提交：`ecb1f5d feat: smart executor, structured trace, composite tools and safety fixes`。
+- 后续验收与修复：`8fa2168`、`3be3cb6`、`e96dcfc`。
+- Converge 归档：`.converge/done/20260614-smart-executor-and-trace/`、`.converge/done/20260614-project-acceptance/`、`.converge/done/20260615-mcp-audit-remediation-acceptance/`。
+- 说明：本文件此前因未移动而错误停留在 `active/`，本次仅纠正计划状态。
+
 ## 背景与问题
 
 当前 `computer-use-mcp` 已提供 20 个原子工具（点击、移动、截图、键盘、查找控件、启动应用等），可作为 Kimi Code / opencode 的本地 GUI 自动化后端。但在真实任务中暴露出三个问题：

@@ -69,3 +69,26 @@
 - 复合工具只依赖 UIA；若找不到目标，返回结构化 `ui_not_found`，不替模型做视觉判断。
 - 上层多模态模型可直接读取 `screenshot` 返回的截图，自行估算坐标并调用 `click(x, y)` 等原子工具。
 - 对高频自定义绘制应用，可在 `docs/plans/` 中记录“视觉坐标 → 实际动作”映射表。
+
+## Nested 工具名不是 MCP 外部名称
+
+**现象**：在 `batch.actions[].tool` 或 `run_task_plan.steps[].tool` 中传入 `computer-use_press_key`、`mcp__computer-use__press_key` 或拼写错误时，步骤失败。
+
+**原因**：嵌套调用的权威名称是 server 内部 canonical tool name。已知 MCP 前缀只做兼容规范化；未知名称会返回 `invalid_tool`，不会模糊执行。
+
+**解决**：
+- 优先使用 Schema enum 中的 canonical 名称，如 `press_key`。
+- 响应里的 `requested_tool` 表示原始输入，`tool` 表示实际执行的 canonical 名称。
+- 看到 `invalid_tool` 时先修正工具名，不要把它当作 GUI 操作失败。
+
+## 空目录不是产物证据
+
+**现象**：执行侧把 `~/.computer-use/traces/.../snapshots/` 或全局 `snapshots/` 目录描述为“本次任务含快照”，但实际 trace 没有对应文件。
+
+**原因**：目录存在不代表本次调用产生了截图或 UI-tree JSON；历史回退目录还可能包含其他无 trace 上下文的 snapshot 截图。
+
+**解决**：
+- 汇报时以响应中的 `trace_path`、`artifact_root` 和 `artifacts` 为准。
+- `artifacts.screenshots` 只表示本次 trace 下真实存在的截图 PNG。
+- `artifacts.snapshots` 只表示本次 trace 下真实存在的 UI-tree JSON。
+- 不要通过扫描 `<trace_dir>/snapshots/` 推断某次任务的证据。

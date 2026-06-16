@@ -63,12 +63,20 @@
 ### 批量执行类
 
 - `batch`：在一次调用里顺序执行多个工具，适合把 GUI 工作流（如“启动 → 点击菜单 → 选择项 → 截图验证”）打包成一次请求，减少长上下文下的回合数。**直接调用此工具即可，不要在 Python/Bash 里写 `import sys/json/time` 来包装 `_call_tool`**。参数：
-  - `actions`：工具调用数组，每项包含 `tool`（工具名）、`args`（参数对象），以及可选的 `capture_snapshot`（在该动作执行前调用 `get_ui_snapshot` 并保存快照路径到该步骤结果的 `snapshot` 字段，便于复盘定位）。
+  - `actions`：工具调用数组，每项包含 `tool`（canonical 工具名）、`args`（参数对象），以及可选的 `capture_snapshot`（在该动作执行前调用 `get_ui_snapshot` 并保存 UI-tree JSON 路径到该步骤结果的 `snapshot` 字段，便于复盘定位）。
   - `stop_on_error`（默认 `true`）：遇到错误时是否停止后续动作。
   - `final_screenshot`（默认 `false`）：执行完成后是否追加一张最终截图。截图会保存到磁盘并在 `final_screenshot` 中返回 `{saved_path, monitor, width, height, timestamp}`，不会返回 base64。
   - `screenshot_monitor`（默认 `1`）：最终截图的显示器索引，`0` 表示整个虚拟桌面。
 
-返回 JSON 包含 `results`（每步结果，含 `index`、`tool`、`result` 或 `error`、`timestamp`，如果该步开启 `capture_snapshot` 还会包含 `snapshot` 路径）、`failed_index`（失败位置，无失败为 `null`）、`trace_id`（本次批量调用生成的 trace ID，可用于事后审计）、`timestamp`；当 `final_screenshot=true` 时还会包含 `final_screenshot`（保存路径引用）。`timeout=true` 视为失败。`batch` 内禁止再次调用 `batch` 或 `run_task_plan`，单次最多展开 100 个动作。
+`tool` 的 Schema enum 是权威集合。已知外部 MCP 前缀（如 `computer-use_press_key`、`mcp__computer-use__press_key`）会被规范化为 canonical 名称，但响应会同时返回 `requested_tool` 和 `tool`。未知、拼错或禁止嵌套的工具名返回结构化 `invalid_tool`、候选和 allowed tools；不会继续执行真实输入动作。
+
+返回 JSON 包含 `results`（每步结果，含 `index`、`requested_tool`、`tool`、`result`、`timestamp`）、`status`、`failed_index`、`error_kind`、`executed_count`、`requested_count`、`trace_id`、`trace_path`、`artifact_root`、`artifacts` 和 `timestamp`；当 `final_screenshot=true` 时还会包含 `final_screenshot`（保存路径引用）。`timeout=true` 视为失败。`batch` 内禁止再次调用 `batch` 或 `run_task_plan`，单次最多展开 100 个动作。
+
+`artifacts` 由 trace 层的扁平 manifest 派生，只列实际存在的文件：
+
+- `artifacts.screenshots`：trace 上下文内的截图 PNG。
+- `artifacts.snapshots`：trace 上下文内的 UI-tree JSON。
+- `artifacts.report`：`report.md` 路径；不存在时为 `null`。
 
 `batch` 典型调用示例（等待时间单位为秒）：
 
@@ -132,7 +140,7 @@
   - `steps`：步骤数组，每项 `{"tool": ..., "args": ...}`，支持普通工具、复合工具和一层 `batch`，禁止嵌套 `run_task_plan`。
   - `final_state`（默认 `false`）：任务结束时是否捕获 `get_ui_snapshot(include_screenshot=true)`。
   - `capture_screenshots`（默认 `true`）：是否为每个 step 自动截图并写入 trace。
-  返回 `trace_id`、`results`、`report_path`、`failed_index`，以及可选的 `final_state_path`。`error`、`timeout=true` 和 PyAutoGUI fail-safe 均按失败处理；单次最多展开 100 个步骤。
+  返回 `trace_id`、`trace_path`、`artifact_root`、`artifacts`、`results`、`report_path`、`status`、`failed_index`、`error_kind`、`executed_count`、`requested_count`，以及可选的 `final_state_path`。`error`、`timeout=true` 和 PyAutoGUI fail-safe 均按失败处理；单次最多展开 100 个步骤。
 - `retry_step(trace_id, step_index, mode)`：重放 trace 中的某一步。
   - `mode="single"`（默认）：仅重执行该 step。
   - `mode="from_step"`：从该 step 起顺序重放后续所有 step。
@@ -144,12 +152,13 @@
 ## Trace 与复盘
 
 - 每个工具调用（包括 `batch` 子步骤和单独工具）都会写入结构化 trace，目录由 `config.yaml` 的 `trace_dir` 配置，默认 `~/.computer-use/traces/`。
-- `batch` 返回的 `trace_id` 可用于在对应目录下找到 `trace.jsonl`、截图和快照（若启用）。
+- `batch`、`run_task_plan` 和 `review_task` 直接返回 `trace_path`、`artifact_root` 和 `artifacts`。执行侧应以响应字段为证据，不扫描目录名推断状态。
 - 单条 trace 记录包含 `trace_id`、`step_index`、`tool`、`args`、`result`、`duration_ms`、`screenshot_path`、`ui_snapshot_path`、`error_kind`、`error_message`、`replayable`。
-- 当前 `error_kind` 取值：`safety_block` / `ui_not_found` / `stale_uid` / `timeout` / `fail_safe` / `unknown`，未出错时为 `null`。
+- 当前 `error_kind` 取值：`safety_block` / `ui_not_found` / `stale_uid` / `timeout` / `fail_safe` / `invalid_tool` / `unknown`，未出错时为 `null`。
 - `trace_id` 只允许安全的单一 ASCII 路径组件，所有读写入口使用同一校验。
 - Trace 和工具日志会递归移除 `text`、`value`、`password`、`secret` 字段正文，只保留脱敏标记和长度；关联结果或错误中的相同正文也会替换。
 - Trace 不记录多模态模型推理时间，也不包含截图 base64；复盘时通过路径引用读取对应截图或快照。
+- trace 上下文内按文件类型分流：截图 PNG 写入 `<trace_id>/screenshots/`，UI-tree JSON 写入 `<trace_id>/snapshots/`。无 trace 上下文的独立 snapshot 截图仍回退到全局 `<trace_dir>/snapshots/`，两者语义不同。
 
 ## 安全行为
 
