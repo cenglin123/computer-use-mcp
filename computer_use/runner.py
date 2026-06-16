@@ -14,6 +14,7 @@ from typing import Any
 from computer_use import snapshot, trace as trace_module
 from computer_use.core import get_coordinate_system, save_screenshot
 from computer_use.mcp_server import (
+    ExecutionContext,
     _call_tool,
     _failure_for_result,
     _save_ui_snapshot,
@@ -76,6 +77,8 @@ def run_task_plan(
     goal: str | None = None,
     final_state: bool = False,
     capture_screenshots: bool = True,
+    task_id: str | None = None,
+    is_standalone: bool = False,
 ) -> dict[str, Any]:
     """Execute a structured task plan and produce a trace + report.
 
@@ -137,11 +140,21 @@ def run_task_plan(
         if screenshot_path:
             trace_context["screenshot_path"] = screenshot_path
 
-        result_text = _call_tool(
-            tool_name,
-            tool_args,
-            trace_context=trace_context,
-        )
+        if task_id:
+            result_text = _call_tool(
+                tool_name,
+                tool_args,
+                context=ExecutionContext(
+                    task_id=task_id,
+                    trace_id=trace_id,
+                    step_index=step_index,
+                    top_level=False,
+                    is_standalone=is_standalone,
+                    screenshot_path=screenshot_path,
+                ),
+            )
+        else:
+            result_text = _call_tool(tool_name, tool_args, trace_context=trace_context)
         try:
             result_data = json.loads(result_text)
         except json.JSONDecodeError:
@@ -208,6 +221,8 @@ def retry_step(
     step_index: int,
     mode: str = "single",
     retry_suffix: str | None = None,
+    task_id: str | None = None,
+    is_standalone: bool = False,
 ) -> dict[str, Any]:
     """Re-execute a step from an existing trace.
 
@@ -276,11 +291,24 @@ def retry_step(
         )
         retry_suffix = f"{step_index}.retry.{retry_count + 1}"
 
-    result_text = _call_tool(
-        tool_name,
-        tool_args,
-        trace_context={"trace_id": trace_id, "step_index": retry_suffix},
-    )
+    if task_id:
+        result_text = _call_tool(
+            tool_name,
+            tool_args,
+            context=ExecutionContext(
+                task_id=task_id,
+                trace_id=trace_id,
+                step_index=retry_suffix,
+                top_level=False,
+                is_standalone=is_standalone,
+            ),
+        )
+    else:
+        result_text = _call_tool(
+            tool_name,
+            tool_args,
+            trace_context={"trace_id": trace_id, "step_index": retry_suffix},
+        )
     try:
         result_data = json.loads(result_text)
     except json.JSONDecodeError:
@@ -305,11 +333,24 @@ def retry_step(
                 and str(r["step_index"]).startswith(f"{rec['step_index']}.retry.")
             )
             next_suffix = f"{rec['step_index']}.retry.{next_retry_count + 1}"
-            sub_text = _call_tool(
-                rec["tool"],
-                rec.get("args", {}),
-                trace_context={"trace_id": trace_id, "step_index": next_suffix},
-            )
+            if task_id:
+                sub_text = _call_tool(
+                    rec["tool"],
+                    rec.get("args", {}),
+                    context=ExecutionContext(
+                        task_id=task_id,
+                        trace_id=trace_id,
+                        step_index=next_suffix,
+                        top_level=False,
+                        is_standalone=is_standalone,
+                    ),
+                )
+            else:
+                sub_text = _call_tool(
+                    rec["tool"],
+                    rec.get("args", {}),
+                    trace_context={"trace_id": trace_id, "step_index": next_suffix},
+                )
             try:
                 sub_data = json.loads(sub_text)
             except json.JSONDecodeError:

@@ -8,6 +8,7 @@ import logging.handlers
 import sys
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -84,6 +85,20 @@ def _setup_logging(log_dir: Path | None = None) -> None:
 #: Maximum allowed sleep duration in seconds for the ``sleep`` tool.
 MAX_SLEEP_DURATION: float = 60.0
 _MANIFEST_TOOL_NAMES = {"batch", "run_task_plan", "review_task"}
+_TASK_MANAGEMENT_TOOLS = frozenset(
+    {"start_task", "finish_task", "get_task", "list_tasks", "review_task_session"}
+)
+_TASK_CONTEXT_EXCLUDED_TOOLS = _TASK_MANAGEMENT_TOOLS | {"review_task"}
+
+
+@dataclass(frozen=True)
+class ExecutionContext:
+    task_id: str
+    trace_id: str
+    step_index: int | str
+    top_level: bool
+    is_standalone: bool
+    screenshot_path: str | None = None
 
 TOOLS: list[Tool] = [
     Tool(
@@ -661,6 +676,23 @@ TOOLS: list[Tool] = [
 ]
 
 
+def _attach_task_context_schemas() -> None:
+    for tool in TOOLS:
+        if tool.name in _TASK_CONTEXT_EXCLUDED_TOOLS:
+            continue
+        properties = tool.inputSchema.setdefault("properties", {})
+        properties.setdefault(
+            "task_id",
+            {
+                "type": "string",
+                "description": "Optional business task session ID returned by start_task.",
+            },
+        )
+
+
+_attach_task_context_schemas()
+
+
 def _error_kind_for_result(error_value: Any) -> str:
     """Map a structured result error value to a trace error_kind."""
     if error_value is None:
@@ -725,24 +757,56 @@ def _attach_trace_manifest(data: dict[str, Any], trace_id: str) -> dict[str, Any
     return data
 
 
-def _call_tool(name: str, args: dict, trace_context: dict[str, Any] | None = None) -> str:
+def _call_tool(
+    name: str,
+    args: dict,
+    trace_context: dict[str, Any] | None = None,
+    *,
+    context: ExecutionContext | None = None,
+) -> str:
+    dispatch_args = dict(args)
+    if name not in _TASK_MANAGEMENT_TOOLS:
+        dispatch_args.pop("task_id", None)
     logging.info(
-        "tool=%s args=%s", name, trace_module.sanitize_for_logging(args)
+        "tool=%s args=%s", name, trace_module.sanitize_for_logging(dispatch_args)
     )
-    if trace_context:
+    if context is not None:
+        trace_id = context.trace_id
+        step_index = context.step_index
+        screenshot_path = context.screenshot_path
+        task_id = context.task_id
+        is_standalone = context.is_standalone
+    elif trace_context:
         trace_id = trace_context["trace_id"]
+        step_index = trace_context["step_index"]
+        screenshot_path = trace_context.get("screenshot_path")
+        task_id = trace_context.get("task_id")
+        is_standalone = bool(trace_context.get("is_standalone", False))
     elif name == "run_task_plan" and args.get("trace_id"):
         trace_id = args["trace_id"]
+        step_index = 0
+        screenshot_path = None
+        task_id = None
+        is_standalone = False
     else:
         trace_id = trace_module.generate_trace_id()
-    step_index = trace_context["step_index"] if trace_context else 0
-    screenshot_path = trace_context.get("screenshot_path") if trace_context else None
+        step_index = 0
+        screenshot_path = None
+        task_id = None
+        is_standalone = False
     start = time.perf_counter()
     payload: str | None = None
     error: Exception | None = None
     try:
         cs = get_coordinate_system()
-        payload = _dispatch_tool(name, args, cs, trace_id=trace_id, parent_step_index=step_index)
+        dispatch_kwargs: dict[str, Any] = {
+            "trace_id": trace_id,
+            "parent_step_index": step_index,
+        }
+        if task_id is not None:
+            dispatch_kwargs["task_id"] = task_id
+            dispatch_kwargs["is_standalone"] = is_standalone
+        payload = _dispatch_tool(name, dispatch_args, cs, **dispatch_kwargs)
     except SafetyError as exc:
         logging.warning("safety block: %s", exc)
         payload = json.dumps({"error": str(exc)})
@@ -799,7 +863,7 @@ def _call_tool(name: str, args: dict, trace_context: dict[str, Any] | None = Non
                     trace_id=trace_id,
                     step_index=step_index,
                     tool=name,
-                    args=args,
+                    args=dispatch_args,
                     result=result_data,
                     duration_ms=duration_ms,
                     screenshot_path=screenshot_path,
@@ -822,6 +886,16 @@ def _call_tool(name: str, args: dict, trace_context: dict[str, Any] | None = Non
 
     if name in _MANIFEST_TOOL_NAMES and isinstance(data, dict):
         data = _attach_trace_manifest(data, trace_id)
+
+    if context is not None and isinstance(data, dict):
+        data.setdefault("task_id", context.task_id)
+        data.setdefault("trace_id", context.trace_id)
+        try:
+            from computer_use import task_session
+
+            data.setdefault("task_path", task_session.get_task(context.task_id)["task_path"])
+        except Exception:
+            pass
 
     return json.dumps(data)
 
@@ -864,6 +938,8 @@ def _dispatch_tool(
     cs: CoordinateSystem,
     trace_id: str | None = None,
     parent_step_index: int | str | None = None,
+    task_id: str | None = None,
+    is_standalone: bool = False,
 ) -> str:
     if name == "get_ui_snapshot":
         from computer_use import snapshot
@@ -1191,7 +1267,13 @@ def _dispatch_tool(
         return json.dumps(result)
 
     if name == "batch":
-        return _batch_tool(args, trace_id=trace_id, parent_step_index=parent_step_index)
+        return _batch_tool(
+            args,
+            trace_id=trace_id,
+            parent_step_index=parent_step_index,
+            task_id=task_id,
+            is_standalone=is_standalone,
+        )
 
     if name == "click_by_uid":
         from computer_use import snapshot
@@ -1255,6 +1337,8 @@ def _dispatch_tool(
             goal=args.get("goal"),
             final_state=args.get("final_state", False),
             capture_screenshots=args.get("capture_screenshots", True),
+            task_id=task_id,
+            is_standalone=is_standalone,
         )
         return json.dumps(result)
 
@@ -1264,6 +1348,8 @@ def _dispatch_tool(
             trace_id=args["trace_id"],
             step_index=args["step_index"],
             mode=args.get("mode", "single"),
+            task_id=task_id,
+            is_standalone=is_standalone,
         )
         return json.dumps(result)
 
@@ -1322,6 +1408,8 @@ def _batch_tool(
     args: dict,
     trace_id: str | None = None,
     parent_step_index: int | str | None = None,
+    task_id: str | None = None,
+    is_standalone: bool = False,
 ) -> str:
     """Execute a list of tool calls sequentially and return aggregated results."""
     actions = args["actions"]
@@ -1386,11 +1474,24 @@ def _batch_tool(
             sub_step_index = i + 1
 
         try:
-            result_text = _call_tool(
-                tool_name,
-                tool_args,
-                trace_context={"trace_id": trace_id, "step_index": sub_step_index},
-            )
+            if task_id:
+                result_text = _call_tool(
+                    tool_name,
+                    tool_args,
+                    context=ExecutionContext(
+                        task_id=task_id,
+                        trace_id=trace_id,
+                        step_index=sub_step_index,
+                        top_level=False,
+                        is_standalone=is_standalone,
+                    ),
+                )
+            else:
+                result_text = _call_tool(
+                    tool_name,
+                    tool_args,
+                    trace_context={"trace_id": trace_id, "step_index": sub_step_index},
+                )
             try:
                 result_data = json.loads(result_text)
             except json.JSONDecodeError:
@@ -1439,11 +1540,24 @@ def _batch_tool(
         try:
             cs = get_coordinate_system()
             validate_monitor_index(monitor, len(cs.get_monitors()))
-            screenshot_text = _call_tool(
-                "screenshot",
-                {"monitor": monitor},
-                trace_context={"trace_id": trace_id, "step_index": len(actions) + 1},
-            )
+            if task_id:
+                screenshot_text = _call_tool(
+                    "screenshot",
+                    {"monitor": monitor},
+                    context=ExecutionContext(
+                        task_id=task_id,
+                        trace_id=trace_id,
+                        step_index=len(actions) + 1,
+                        top_level=False,
+                        is_standalone=is_standalone,
+                    ),
+                )
+            else:
+                screenshot_text = _call_tool(
+                    "screenshot",
+                    {"monitor": monitor},
+                    trace_context={"trace_id": trace_id, "step_index": len(actions) + 1},
+                )
             try:
                 response["final_screenshot"] = json.loads(screenshot_text)
             except json.JSONDecodeError:
@@ -1586,15 +1700,115 @@ def _current_logical_position() -> tuple[int, int]:
     return int(x), int(y)
 
 
+def _task_kind_for_tool(name: str) -> str:
+    if name == "batch":
+        return "batch"
+    if name == "run_task_plan":
+        return "task_plan"
+    return "atomic"
+
+
+def _establish_context(name: str, args: dict) -> ExecutionContext:
+    from computer_use import task_session
+
+    explicit_task_id = args.get("task_id")
+    if explicit_task_id:
+        task_id = explicit_task_id
+        is_standalone = False
+        task_session.get_task(task_id)
+    else:
+        task = task_session.start_standalone_task(f"{name} call")
+        task_id = task["task_id"]
+        is_standalone = True
+
+    if name in {"run_task_plan", "retry_step"} and args.get("trace_id"):
+        trace_id = args["trace_id"]
+    else:
+        trace_id = trace_module.generate_trace_id()
+
+    task_session.register_trace(
+        task_id,
+        trace_id,
+        kind=_task_kind_for_tool(name),
+        tool=name,
+    )
+    trace_module.write_trace_meta(trace_id, task_id=task_id)
+    return ExecutionContext(
+        task_id=task_id,
+        trace_id=trace_id,
+        step_index=0,
+        top_level=True,
+        is_standalone=is_standalone,
+    )
+
+
+def _complete_context_trace(
+    context: ExecutionContext,
+    result_text: str | None = None,
+    error: Exception | None = None,
+) -> None:
+    from computer_use import task_session
+
+    status = "failed"
+    if error is None and result_text is not None:
+        try:
+            data: Any = json.loads(result_text)
+        except json.JSONDecodeError:
+            data = result_text
+        status = "failed" if _failure_for_result(data) is not None else "succeeded"
+    try:
+        task_session.complete_trace(context.task_id, context.trace_id, status=status)
+    except Exception as exc:
+        logging.warning("task trace completion failed: %s", exc)
+
+
+def _finish_standalone_context(context: ExecutionContext) -> None:
+    if not context.is_standalone:
+        return
+    from computer_use import task_session
+
+    try:
+        task_session.finish_task(context.task_id)
+    except Exception as exc:
+        logging.warning("standalone task finish failed: %s", exc)
+
+
 def _handle_tool_call(name: str, arguments: dict) -> str:
     """Execute one MCP call without exposing input values in outer errors."""
     safe_arguments = arguments or {}
+    if name in _TASK_MANAGEMENT_TOOLS:
+        try:
+            data = json.loads(_dispatch_tool(name, safe_arguments, None))  # type: ignore[arg-type]
+            if isinstance(data, dict) and "timestamp" not in data:
+                data["timestamp"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+            return json.dumps(data)
+        except Exception as exc:
+            message = trace_module.sanitize_message(safe_arguments, str(exc))
+            logging.error("tool error: %s", message)
+            return json.dumps({"error": message})
+
+    context: ExecutionContext | None = None
     try:
-        return _call_tool(name, safe_arguments)
+        context = _establish_context(name, safe_arguments)
+        result = _call_tool(name, safe_arguments, context=context)
+        _complete_context_trace(context, result_text=result)
+        return result
     except Exception as exc:
+        if context is not None:
+            _complete_context_trace(context, error=exc)
+        if hasattr(exc, "task_id"):
+            try:
+                data = _task_error(exc)
+                data["timestamp"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+                return json.dumps(data)
+            except Exception:
+                pass
         message = trace_module.sanitize_message(safe_arguments, str(exc))
         logging.error("tool error: %s", message)
         return json.dumps({"error": message})
+    finally:
+        if context is not None:
+            _finish_standalone_context(context)
 
 
 async def serve() -> None:

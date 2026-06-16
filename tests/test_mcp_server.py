@@ -231,6 +231,97 @@ def test_finish_task_tool_returns_task_not_found(tmp_path, monkeypatch):
     assert "timestamp" in data
 
 
+def test_executable_tool_schemas_include_optional_task_id():
+    no_task_id_tools = {"start_task", "list_tasks", "review_task"}
+    task_management_tools = {"finish_task", "get_task", "review_task_session"}
+
+    for tool in TOOLS:
+        properties = tool.inputSchema.get("properties", {})
+        if tool.name in no_task_id_tools:
+            assert "task_id" not in properties
+        elif tool.name in task_management_tools:
+            assert "task_id" in properties
+        else:
+            assert properties["task_id"]["type"] == "string"
+
+
+def test_explicit_task_groups_multiple_top_level_calls(tmp_path, monkeypatch):
+    import computer_use.mcp_server as server
+    import computer_use.task_session as task_session
+    import computer_use.trace as trace_module
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
+    monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path / "traces")
+    monkeypatch.setattr(server.time, "sleep", lambda duration: None)
+    task_id = json.loads(_call_tool("start_task", {"goal": "group"}))["task_id"]
+
+    first = json.loads(server._handle_tool_call("sleep", {"duration": 0, "task_id": task_id}))
+    second = json.loads(server._handle_tool_call("sleep", {"duration": 0, "task_id": task_id}))
+
+    task = task_session.get_task(task_id)
+    assert first["task_id"] == task_id
+    assert second["task_id"] == task_id
+    assert task["status"] == "active"
+    assert task["trace_count"] == 2
+    assert {link["status"] for link in task["traces"]} == {"succeeded"}
+
+
+def test_missing_task_id_creates_closed_standalone_task(tmp_path, monkeypatch):
+    import computer_use.mcp_server as server
+    import computer_use.task_session as task_session
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
+    monkeypatch.setattr(server.time, "sleep", lambda duration: None)
+
+    data = json.loads(server._handle_tool_call("sleep", {"duration": 0}))
+    task = task_session.get_task(data["task_id"])
+
+    assert task["mode"] == "standalone"
+    assert task["status"] == "succeeded"
+    assert task["trace_count"] == 1
+
+
+def test_batch_registers_only_top_level_trace_for_task(tmp_path, monkeypatch):
+    import computer_use.mcp_server as server
+    import computer_use.task_session as task_session
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
+    monkeypatch.setattr(server.time, "sleep", lambda duration: None)
+
+    data = json.loads(
+        server._handle_tool_call(
+            "batch",
+            {
+                "actions": [
+                    {"tool": "sleep", "args": {"duration": 0}},
+                    {"tool": "sleep", "args": {"duration": 0}},
+                ],
+            },
+        )
+    )
+    task = task_session.get_task(data["task_id"])
+
+    assert task["status"] == "succeeded"
+    assert task["trace_count"] == 1
+    assert task["traces"][0]["trace_id"] == data["trace_id"]
+
+
+def test_task_id_is_not_written_to_trace_args(tmp_path, monkeypatch):
+    import computer_use.mcp_server as server
+    import computer_use.task_session as task_session
+    import computer_use.trace as trace_module
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
+    monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path / "traces")
+    monkeypatch.setattr(server.time, "sleep", lambda duration: None)
+    task_id = json.loads(_call_tool("start_task", {"goal": "redact task id"}))["task_id"]
+
+    data = json.loads(server._handle_tool_call("sleep", {"duration": 0, "task_id": task_id}))
+    record = trace_module.read_trace(data["trace_id"])[0]
+
+    assert "task_id" not in record["args"]
+
+
 def test_get_monitors() -> None:
     result = _call_tool("get_monitors", {})
     data = json.loads(result)
