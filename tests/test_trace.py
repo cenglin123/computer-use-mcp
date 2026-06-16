@@ -71,6 +71,24 @@ def test_artifact_dir_creates_only_requested_kind(tmp_trace_dir: Path) -> None:
     assert not (screenshots.parent / "snapshots").exists()
 
 
+def test_artifact_manifest_lists_only_existing_files(tmp_trace_dir: Path) -> None:
+    root = trace.trace_root("manifest")
+    trace.record_step("manifest", 0, "click", {})
+    screenshot = trace.artifact_dir("manifest", "screenshots") / "step.png"
+    screenshot.write_bytes(b"png")
+
+    manifest = trace.artifact_manifest("manifest")
+
+    assert manifest == {
+        "trace_id": "manifest",
+        "artifact_root": str(root),
+        "trace_path": str(root / "trace.jsonl"),
+        "report_path": None,
+        "screenshots": [str(screenshot)],
+        "snapshots": [],
+    }
+
+
 def test_read_trace_returns_empty_for_missing_trace(tmp_trace_dir: Path) -> None:
     assert trace.read_trace("does-not-exist") == []
 

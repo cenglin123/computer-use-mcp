@@ -751,6 +751,13 @@ def test_batch_tool_runs_actions(monkeypatch) -> None:
     assert "timestamp" in data["results"][0]
     assert "timestamp" in data["results"][1]
     assert data["final_screenshot"]["saved_path"] == "C:/shots/final.png"
+    assert data["trace_path"] is not None
+    assert data["artifact_root"].endswith(data["trace_id"])
+    assert data["artifacts"] == {
+        "screenshots": [],
+        "snapshots": [],
+        "report": None,
+    }
     assert "timestamp" in data
 
 
@@ -1638,6 +1645,9 @@ def test_mcp_run_task_plan_uses_single_trace(monkeypatch, tmp_path):
     assert trace_dirs[0].name == data["trace_id"]
     records = trace_module.read_trace(data["trace_id"])
     assert [record["tool"] for record in records] == ["sleep"]
+    assert data["trace_path"] == str(tmp_path / data["trace_id"] / "trace.jsonl")
+    assert data["artifact_root"] == str(tmp_path / data["trace_id"])
+    assert data["artifacts"]["report"] == data["report_path"]
 
 
 def test_mcp_run_task_plan_with_explicit_id_uses_single_trace(
@@ -1666,6 +1676,29 @@ def test_mcp_run_task_plan_with_explicit_id_uses_single_trace(
     report_path = Path(data["report_path"])
     assert report_path.parent == tmp_path / "explicit-trace"
     assert report_path.exists()
+
+
+def test_review_task_response_uses_reviewed_trace_manifest(tmp_path, monkeypatch):
+    import computer_use.trace as trace_module
+
+    monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path)
+    trace_module.record_step(
+        trace_id="review-manifest",
+        step_index=1,
+        tool="sleep",
+        args={"duration": 0},
+    )
+
+    data = json.loads(_call_tool("review_task", {"trace_id": "review-manifest"}))
+
+    assert data["trace_id"] == "review-manifest"
+    assert data["trace_path"] == str(tmp_path / "review-manifest" / "trace.jsonl")
+    assert data["artifact_root"] == str(tmp_path / "review-manifest")
+    assert data["artifacts"] == {
+        "screenshots": [],
+        "snapshots": [],
+        "report": None,
+    }
 
 
 def test_tool_logging_redacts_nested_input_values(

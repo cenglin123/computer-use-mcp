@@ -83,6 +83,7 @@ def _setup_logging(log_dir: Path | None = None) -> None:
 
 #: Maximum allowed sleep duration in seconds for the ``sleep`` tool.
 MAX_SLEEP_DURATION: float = 60.0
+_MANIFEST_TOOL_NAMES = {"batch", "run_task_plan", "review_task"}
 
 TOOLS: list[Tool] = [
     Tool(
@@ -648,6 +649,21 @@ def _failure_for_result(result: Any) -> tuple[str, str] | None:
     return None
 
 
+def _attach_trace_manifest(data: dict[str, Any], trace_id: str) -> dict[str, Any]:
+    """Derive response trace paths and artifacts from the flat trace manifest."""
+    target_trace_id = data.get("trace_id") if isinstance(data.get("trace_id"), str) else trace_id
+    manifest = trace_module.artifact_manifest(target_trace_id)
+    data["trace_id"] = manifest["trace_id"]
+    data["trace_path"] = manifest["trace_path"]
+    data["artifact_root"] = manifest["artifact_root"]
+    data["artifacts"] = {
+        "screenshots": manifest["screenshots"],
+        "snapshots": manifest["snapshots"],
+        "report": manifest["report_path"],
+    }
+    return data
+
+
 def _call_tool(name: str, args: dict, trace_context: dict[str, Any] | None = None) -> str:
     logging.info(
         "tool=%s args=%s", name, trace_module.sanitize_for_logging(args)
@@ -742,6 +758,9 @@ def _call_tool(name: str, args: dict, trace_context: dict[str, Any] | None = Non
 
     if isinstance(data, dict) and "timestamp" not in data:
         data["timestamp"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+
+    if name in _MANIFEST_TOOL_NAMES and isinstance(data, dict):
+        data = _attach_trace_manifest(data, trace_id)
 
     return json.dumps(data)
 

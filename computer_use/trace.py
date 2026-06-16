@@ -82,6 +82,29 @@ def artifact_dir(trace_id: str, kind: str) -> Path:
     return path
 
 
+def artifact_manifest(trace_id: str) -> dict[str, Any]:
+    """Return existing trace artifact paths without creating missing files."""
+    validate_trace_id(trace_id)
+    root = trace_dir() / trace_id
+    trace_path = root / "trace.jsonl"
+    report_path = root / "report.md"
+
+    def files(kind: str) -> list[str]:
+        directory = root / kind
+        if not directory.is_dir():
+            return []
+        return [str(path) for path in sorted(directory.iterdir()) if path.is_file()]
+
+    return {
+        "trace_id": trace_id,
+        "artifact_root": str(root),
+        "trace_path": str(trace_path) if trace_path.is_file() else None,
+        "report_path": str(report_path) if report_path.is_file() else None,
+        "screenshots": files("screenshots"),
+        "snapshots": files("snapshots"),
+    }
+
+
 def write_trace_meta(trace_id: str, goal: str | None = None) -> Path:
     """Persist task metadata such as the goal to ``<trace_id>/meta.json``."""
     root = trace_root(trace_id)
