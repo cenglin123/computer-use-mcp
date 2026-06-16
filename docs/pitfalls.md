@@ -92,3 +92,25 @@
 - `artifacts.screenshots` 只表示本次 trace 下真实存在的截图 PNG。
 - `artifacts.snapshots` 只表示本次 trace 下真实存在的 UI-tree JSON。
 - 不要通过扫描 `<trace_dir>/snapshots/` 推断某次任务的证据。
+
+## trace 根目录不是业务任务日志
+
+**现象**：执行侧向用户汇报“本次任务日志在 `~/.computer-use/traces/`”，或把时间相邻的多个 trace 当作同一任务证据。
+
+**原因**：trace 根目录是全局存储区，一天内可能包含多个业务任务、standalone 调用和历史兼容 trace。时间相邻不能证明同属一个任务。
+
+**解决**：
+- 汇报任务证据时必须给出 `task_id` 和关联 trace 数量。
+- 需要跨调用审计时，先 `start_task(goal)`，后续工具调用显式传 `task_id`，最后用 `review_task_session(task_id)` 汇总。
+- 不要用目录扫描或时间邻近推断 task 归属；以 task 下的 trace 归属文件和复盘结果为准。
+
+## task 或 locator 状态异常
+
+**现象**：`list_tasks(status=active)` 长期看到旧任务，或按 ID 查询 trace/task 失败但分区目录仍存在。
+
+**原因**：显式 task 需要调用方结束；locator 是可重建派生索引，可能被手工删除或损坏。旧扁平 trace 也可能没有 task 归属。
+
+**解决**：
+- 审计时检查长期 active task，必要时补 `finish_task(..., cancel=true)` 或记录人工裁决。
+- locator 失效时使用 `computer-use audit rebuild-index --dry-run` 先查看影响，再执行重建。
+- 对无主旧 trace，不要自动归入当前任务；只有明确证据时才手工关联或在报告中标记为 legacy/unowned。

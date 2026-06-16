@@ -119,6 +119,17 @@
 | 10.2 | 测试任务脚本 | `python test_task.py` | 正常执行，截图保存到 logs | 检查文件 |
 | 10.3 | 总结任务脚本 | `python write_summary.py` | 桌面只生成 txt，截图在 logs | 检查目录 |
 
+## 11. 业务任务会话审计
+
+| # | 测试项 | 步骤 | 预期结果 | 验收方式 |
+|---|--------|------|----------|----------|
+| 11.1 | 连续两个业务任务 | 依次调用 `start_task(goal="task A")`、两个无破坏性观察工具、`finish_task`；再创建 `task B` 并执行一个观察工具后结束 | 两个 `task_id` 不同，状态均结束 | `get_task` 检查 |
+| 11.2 | trace 归属不串任务 | 对 A/B 分别调用 `review_task_session(task_id)` | A 只包含 A 的 trace，B 只包含 B 的 trace | 检查 trace 列表和数量 |
+| 11.3 | 日期分区 | 查看 `trace_dir/YYYY/MM/DD/` 与 `task_dir/YYYY/MM/DD/` | 新 trace/task 位于创建日分区，根目录不新增平铺 trace | 目录检查 |
+| 11.4 | MCP 重启后查询 | 重启 MCP 服务后调用 `get_task` 和 `review_task_session` | 仍能按 `task_id` 查询，locator 正常解析 | 返回 JSON 检查 |
+| 11.5 | standalone 兼容 | 不传 `task_id` 调用一次无破坏性观察工具 | 响应含自动生成的 `task_id`，对应 task 已结束 | `get_task` 检查 |
+| 11.6 | locator 重建 dry-run | 执行 `python -m computer_use audit rebuild-index --dry-run` | 输出 scanned/created/unchanged/conflicts/invalid 计数，不写索引 | 检查输出和文件时间 |
+
 ---
 
 ## 执行记录

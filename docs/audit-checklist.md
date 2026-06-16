@@ -32,6 +32,15 @@
 - [ ] 多显示器 / DPI 相关说明是否仍然准确？
 - [ ] PaddleOCR 使用系统 Python 而非 `.venv` 的约定是否仍然有效？（注：本 MCP server 不提供 OCR 能力；若计划引入视觉相关工具，需单独评估。）
 
+## 3.1 业务任务与 trace 审计
+
+- [ ] 抽查 `task_dir` 与 `trace_dir` 的日期分区是否符合本地业务日期。
+- [ ] `list_tasks(status=active)` 是否存在长期未结束 task？如有，确认是仍在执行还是应取消归档。
+- [ ] 随机抽取 2 个 task，确认 `review_task_session(task_id)` 只包含该 task 的 trace，不串入时间相邻任务。
+- [ ] 检查 trace/task locator 是否可解析；损坏时先 dry-run `computer-use audit rebuild-index --dry-run`。
+- [ ] 抽查是否存在无主新 trace；若存在，确认是 standalone task、旧布局兼容 trace，还是异常写入。
+- [ ] 对外汇报是否包含 `task_id`、trace 数量和实际 artifact manifest，而不是只给 `~/.computer-use/traces/` 根目录。
+
 ## 4. 未记录的重要变更
 
 - [ ] 浏览 CHANGELOG 最近 ~30 天：`python scripts/changelog.py recent --days 30`，是否有架构级变更未反映到 docs/？

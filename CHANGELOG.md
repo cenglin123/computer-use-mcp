@@ -38,6 +38,12 @@
 #### 变更内容
 - 统一 nested 工具 canonical 名称与 invalid_tool 分类，新增 trace artifact manifest 和响应证据字段，自动截图/快照绑定 trace，避免执行侧混淆目录用途或误报产物。
 
+### feat: 增加业务任务会话审计
+
+#### 变更内容
+- 新增 task_id 生命周期、日期分区 trace、任务级复盘与旧布局兼容，解决同日多任务 trace 难以归属和审计的问题。
+
+
 
 
 

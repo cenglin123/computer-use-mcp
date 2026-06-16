@@ -149,9 +149,35 @@
   - 含已脱敏输入的步骤标记为 `replayable=false`，返回 `retry_not_supported_for_redacted_step`，不会执行脱敏占位符。
 - `review_task(trace_id)`：读取 trace 并生成确定性统计摘要（总步骤数、成功/失败/重试数、错误类型分布、平均耗时、截图/快照索引），不调用 LLM。
 
+## 业务任务会话
+
+业务任务会话用于把多个顶层 MCP 调用归属到同一个可审计任务。标准 Agent 流程：
+
+```text
+1. start_task(goal) -> task_id
+2. tool(..., task_id=task_id)
+3. batch(..., task_id=task_id)
+4. review_task_session(task_id)
+5. finish_task(task_id, summary)
+```
+
+`task_id` 表示业务任务边界，不是模型对话 ID 或客户端会话 ID。一个业务任务可以跨多个 Agent 回合产生多个 trace；同一个 Agent 对话也可以顺序创建多个互不混淆的业务 task。
+
+未传 `task_id` 的顶层调用会自动创建并结束 standalone task，这是兼容旧调用方的行为；需要跨调用复盘或向用户汇报证据时，应显式使用 `start_task` 返回的 `task_id`。
+
+- `start_task(goal)`：创建显式业务 task，返回 `task_id`、`status` 和 `task_path`。
+- `finish_task(task_id, summary?, cancel?)`：结束显式 task；最终成功或失败由已登记 trace 派生，调用方不能伪造成功状态。
+- `get_task(task_id)`：读取 task 元数据和 trace 归属列表。
+- `list_tasks(date?, status?, limit?)`：按创建时间倒序列出 task，可按本地业务日期和状态过滤。
+- `review_task_session(task_id)`：聚合该 task 下所有 trace 的确定性复盘，输出 task 时间线、失败 trace、错误类型和实际存在的产物路径。
+
+所有可执行顶层工具都支持可选 `task_id`；task 管理工具和只读单 trace 复盘 `review_task` 不使用归属上下文。`task_id` 只在 MCP/runner 层用于归属管理，不会传给 `core.py`、`safety.py` 或 UIA 底层函数。
+
 ## Trace 与复盘
 
 - 每个工具调用（包括 `batch` 子步骤和单独工具）都会写入结构化 trace，目录由 `config.yaml` 的 `trace_dir` 配置，默认 `~/.computer-use/traces/`。
+- 新 trace 按本地业务日期写入 `traces/YYYY/MM/DD/<trace_id>/`；旧 `<trace_dir>/<trace_id>/` 扁平布局保持只读兼容，不会被只读查询隐式迁移。
+- `tasks/YYYY/MM/DD/<task_id>/` 保存业务任务生命周期和 trace 归属文件；trace 的实际物理位置通过 locator 按 `trace_id` 解析。
 - `batch`、`run_task_plan` 和 `review_task` 直接返回 `trace_path`、`artifact_root` 和 `artifacts`。执行侧应以响应字段为证据，不扫描目录名推断状态。
 - 单条 trace 记录包含 `trace_id`、`step_index`、`tool`、`args`、`result`、`duration_ms`、`screenshot_path`、`ui_snapshot_path`、`error_kind`、`error_message`、`replayable`。
 - 当前 `error_kind` 取值：`safety_block` / `ui_not_found` / `stale_uid` / `timeout` / `fail_safe` / `invalid_tool` / `unknown`，未出错时为 `null`。
