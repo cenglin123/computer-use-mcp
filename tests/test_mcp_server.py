@@ -125,6 +125,33 @@ def test_batch_action_tool_names_match_tools_registry():
     assert set(BATCH_ACTION_TOOL_NAMES) == registered - excluded
 
 
+def test_task_plan_schema_enumerates_canonical_tool_names():
+    from computer_use.tool_contract import TASK_STEP_TOOL_NAMES
+
+    task_plan = next(tool for tool in TOOLS if tool.name == "run_task_plan")
+    tool_schema = task_plan.inputSchema["properties"]["steps"]["items"]["properties"][
+        "tool"
+    ]
+
+    assert tool_schema["enum"] == list(TASK_STEP_TOOL_NAMES)
+    assert "computer-use_press_key" not in tool_schema["enum"]
+
+
+def test_task_plan_tool_names_match_tools_registry():
+    """Guard against drift between task-plan steps and TOOLS."""
+    from computer_use.tool_contract import (
+        TASK_STEP_TOOL_NAMES,
+        _ORCHESTRATION_TOOL_NAMES,
+    )
+
+    registered = {tool.name for tool in TOOLS}
+    allowed_orchestration = {"batch"}
+    excluded_orchestration = _ORCHESTRATION_TOOL_NAMES - allowed_orchestration
+
+    assert set(TASK_STEP_TOOL_NAMES) <= registered
+    assert set(TASK_STEP_TOOL_NAMES) == registered - excluded_orchestration
+
+
 def test_batch_normalizes_known_mcp_prefix(monkeypatch):
     import computer_use.mcp_server as server
 
@@ -231,6 +258,22 @@ def test_finish_task_tool_returns_task_not_found(tmp_path, monkeypatch):
     assert "timestamp" in data
 
 
+def test_task_management_handler_does_not_create_execution_trace(tmp_path, monkeypatch):
+    import computer_use.mcp_server as server
+    import computer_use.task_session as task_session
+    import computer_use.trace as trace_module
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
+    monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path / "traces")
+
+    data = json.loads(server._handle_tool_call("start_task", {"goal": "managed"}))
+    task = task_session.get_task(data["task_id"])
+
+    assert task["mode"] == "explicit"
+    assert task["trace_count"] == 0
+    assert list((tmp_path / "traces").rglob("trace.jsonl")) == []
+
+
 def test_executable_tool_schemas_include_optional_task_id():
     no_task_id_tools = {"start_task", "list_tasks", "review_task"}
     task_management_tools = {"finish_task", "get_task", "review_task_session"}
@@ -279,6 +322,41 @@ def test_missing_task_id_creates_closed_standalone_task(tmp_path, monkeypatch):
     assert task["mode"] == "standalone"
     assert task["status"] == "succeeded"
     assert task["trace_count"] == 1
+
+
+def test_standalone_context_register_conflict_does_not_leave_active_task(
+    tmp_path,
+    monkeypatch,
+):
+    import computer_use.mcp_server as server
+    import computer_use.task_session as task_session
+    import computer_use.trace as trace_module
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
+    monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path / "traces")
+    owner = task_session.start_task("owner")["task_id"]
+    task_session.register_trace(
+        owner,
+        "shared-trace",
+        kind="task_plan",
+        tool="run_task_plan",
+    )
+
+    data = json.loads(
+        server._handle_tool_call(
+            "run_task_plan",
+            {
+                "trace_id": "shared-trace",
+                "steps": [{"tool": "sleep", "args": {"duration": 0}}],
+            },
+        )
+    )
+    standalone_tasks = [
+        task for task in task_session.list_tasks() if task["mode"] == "standalone"
+    ]
+
+    assert data["error"] == "trace_task_conflict"
+    assert all(task["status"] != "active" for task in standalone_tasks)
 
 
 def test_batch_registers_only_top_level_trace_for_task(tmp_path, monkeypatch):

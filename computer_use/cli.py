@@ -14,9 +14,6 @@ from computer_use.safety import (
     validate_monitor_index,
     validate_text_input,
 )
-from computer_use.ui_automation import inspect_point
-
-
 DEFAULT_MOVE_DURATION = 0.2
 
 
@@ -177,6 +174,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     cs = get_coordinate_system()
+
+    from computer_use.ui_automation import inspect_point
 
     def _dispatch_mouse_subcommand(
         args: argparse.Namespace,

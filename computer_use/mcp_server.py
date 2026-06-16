@@ -60,6 +60,7 @@ from computer_use import trace as trace_module
 from computer_use.tool_contract import (
     BATCH_ACTION_TOOL_NAMES,
     InvalidToolName,
+    TASK_STEP_TOOL_NAMES,
     normalize_nested_tool_name,
 )
 
@@ -525,7 +526,7 @@ TOOLS: list[Tool] = [
                     "items": {
                         "type": "object",
                         "properties": {
-                            "tool": {"type": "string"},
+                            "tool": {"type": "string", "enum": list(TASK_STEP_TOOL_NAMES)},
                             "args": {"type": "object"},
                         },
                         "required": ["tool"],
@@ -1723,27 +1724,41 @@ def _establish_context(name: str, args: dict) -> ExecutionContext:
     from computer_use import task_session
 
     explicit_task_id = args.get("task_id")
-    if explicit_task_id:
-        task_id = explicit_task_id
-        is_standalone = False
-        task_session.get_task(task_id)
-    else:
-        task = task_session.start_standalone_task(f"{name} call")
-        task_id = task["task_id"]
-        is_standalone = True
+    created_standalone_task_id: str | None = None
+    try:
+        if explicit_task_id:
+            task_id = explicit_task_id
+            is_standalone = False
+            task_session.get_task(task_id)
+        else:
+            task = task_session.start_standalone_task(f"{name} call")
+            task_id = task["task_id"]
+            created_standalone_task_id = task_id
+            is_standalone = True
 
-    if name in {"run_task_plan", "retry_step"} and args.get("trace_id"):
-        trace_id = args["trace_id"]
-    else:
-        trace_id = trace_module.generate_trace_id()
+        if name in {"run_task_plan", "retry_step"} and args.get("trace_id"):
+            trace_id = args["trace_id"]
+        else:
+            trace_id = trace_module.generate_trace_id()
 
-    task_session.register_trace(
-        task_id,
-        trace_id,
-        kind=_task_kind_for_tool(name),
-        tool=name,
-    )
-    trace_module.write_trace_meta(trace_id, task_id=task_id)
+        task_session.register_trace(
+            task_id,
+            trace_id,
+            kind=_task_kind_for_tool(name),
+            tool=name,
+        )
+        trace_module.write_trace_meta(trace_id, task_id=task_id)
+    except Exception:
+        if created_standalone_task_id is not None:
+            try:
+                task_session.finish_task(
+                    created_standalone_task_id,
+                    summary="context establishment failed",
+                    cancel=True,
+                )
+            except Exception as cleanup_exc:
+                logging.warning("standalone task cleanup failed: %s", cleanup_exc)
+        raise
     return ExecutionContext(
         task_id=task_id,
         trace_id=trace_id,

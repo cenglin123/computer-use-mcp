@@ -48,6 +48,12 @@
 #### 变更内容
 - 修复 config.yaml 中 task_dir 未进入运行时配置的问题，避免业务 task 写入默认用户目录；补充配置测试与 bugfix 复盘文档。
 
+### fix: 收口计划验收反馈
+
+#### 变更内容
+- 补齐 run_task_plan 嵌套工具 Schema enum，延迟 CLI inspect_point 导入避免只读审计加载 pyautogui，并关闭 trace 归属冲突时创建的 standalone task。
+
+
 
 
 

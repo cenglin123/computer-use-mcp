@@ -39,6 +39,9 @@ def test_cli_click_rejects_secondary_monitor_coordinate(monkeypatch, capsys) -> 
 def test_cli_tasks_list_outputs_json_without_input_device_import(
     tmp_path, monkeypatch, capsys
 ) -> None:
+    # Other test modules in the same process may have already loaded pyautogui
+    # (e.g. test_mcp_server imports mcp_server which imports pyautogui).
+    # Pop them so we can verify the tasks-list execution path does NOT re-import.
     sys.modules.pop("pyautogui", None)
     sys.modules.pop("computer_use.core", None)
     monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path)
@@ -51,3 +54,28 @@ def test_cli_tasks_list_outputs_json_without_input_device_import(
     assert output["tasks"][0]["goal"] == "audit"
     assert "pyautogui" not in sys.modules
     assert "computer_use.core" not in sys.modules
+
+
+def test_cli_module_import_does_not_load_pyautogui() -> None:
+    """Importing computer_use.cli in a clean subprocess must not load pyautogui."""
+    import subprocess
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "from computer_use import cli; "
+                "print('pyautogui' not in sys.modules and "
+                "'computer_use.core' not in sys.modules)"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "True", (
+        f"cli module import loaded input-device dependencies:\n{result.stderr}"
+    )
