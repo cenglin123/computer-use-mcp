@@ -1,6 +1,6 @@
 # MCP Distribution Out-of-Box Usage Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 让用户安装并注册 Computer Use MCP 后，即使不了解本项目，也能通过 MCP 内置 prompts、工具契约、doctor、自检示例和文档入口获得正确使用路径，降低纯文本模型误用、盲点坐标、绕过安全层和 trace 误报的概率。
 
@@ -89,7 +89,7 @@
 - Create: `computer_use/guidance.py`
 - Test: `tests/test_mcp_prompts.py`
 
-- [ ] **Step 1: 写 RED 测试**
+- [x] **Step 1: 写 RED 测试**
 
 创建 `tests/test_mcp_prompts.py`，先验证计划中的 prompt 名称和核心内容：
 
@@ -124,7 +124,7 @@ def test_guidance_mentions_multimodal_and_no_pyautogui_bypass() -> None:
     assert "review_task_session" in text
 ```
 
-- [ ] **Step 2: 运行并确认 RED**
+- [x] **Step 2: 运行并确认 RED**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_mcp_prompts.py -v
@@ -132,7 +132,7 @@ def test_guidance_mentions_multimodal_and_no_pyautogui_bypass() -> None:
 
 Expected: FAIL，`computer_use.guidance` 尚不存在。
 
-- [ ] **Step 3: 实现 `computer_use/guidance.py`**
+- [x] **Step 3: 实现 `computer_use/guidance.py`**
 
 创建：
 
@@ -237,7 +237,7 @@ def prompt_text(name: str) -> str:
     raise KeyError(name)
 ```
 
-- [ ] **Step 4: 运行测试**
+- [x] **Step 4: 运行测试**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_mcp_prompts.py -v
@@ -245,7 +245,7 @@ def prompt_text(name: str) -> str:
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add computer_use/guidance.py tests/test_mcp_prompts.py
@@ -260,11 +260,11 @@ git commit -m "feat: add computer-use agent guidance registry"
 - Modify: `computer_use/mcp_server.py`
 - Test: `tests/test_mcp_prompts.py`
 
-- [ ] **Step 0: 审计 MCP SDK 版本约束**
+- [x] **Step 0: 审计 MCP SDK 版本约束**
 
 读取 `pyproject.toml` 的 `dependencies` 行，确认 `mcp` 的最低版本声明是否满足 `>=1.0.0`（或实际支持 `list_prompts` / `get_prompt` 的最低版本）。本任务以 `pyproject.toml` 中的依赖声明为准：若声明已满足要求，则无需修改依赖；若声明低于要求，先将依赖升级到 `mcp>=1.0.0` 再继续。不在运行时做 prompts 支持的兼容性回退。
 
-- [ ] **Step 1: 写 RED 测试**
+- [x] **Step 1: 写 RED 测试**
 
 在 `tests/test_mcp_prompts.py` 追加：
 
@@ -290,7 +290,7 @@ def test_get_prompt_result_contains_text_message() -> None:
     assert "Computer Use MCP" in result.messages[0].content.text
 ```
 
-- [ ] **Step 2: 运行并确认 RED**
+- [x] **Step 2: 运行并确认 RED**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_mcp_prompts.py -v
@@ -298,7 +298,7 @@ def test_get_prompt_result_contains_text_message() -> None:
 
 Expected: FAIL，`mcp_server.PROMPTS` / `_get_prompt` 尚不存在。
 
-- [ ] **Step 3: 实现 MCP prompt 对象与 helper**
+- [x] **Step 3: 实现 MCP prompt 对象与 helper**
 
 在 `computer_use/mcp_server.py` 中导入：
 
@@ -339,7 +339,7 @@ def _get_prompt(name: str) -> GetPromptResult:
 
 未知 prompt 在 `guidance.prompt_text(name)` 处抛出 `KeyError`，`_get_prompt` 显式捕获后转译为 `ValueError(f"Unknown prompt: {name}")`；`get_prompt` handler 直接调用 `_get_prompt` 即可。
 
-- [ ] **Step 4: 在 `serve()` 注册 MCP prompt handlers**
+- [x] **Step 4: 在 `serve()` 注册 MCP prompt handlers**
 
 在 `serve()` 内 `list_tools` / `call_tool` 旁直接注册 prompts。由于 Step 0 已确认 `pyproject.toml` 要求 `mcp>=1.0.0`，此处不捕获 `AttributeError` 做静默回退；若装饰器不存在，说明依赖未按声明安装，应让启动失败以暴露环境错误。
 
@@ -354,7 +354,7 @@ def _get_prompt(name: str) -> GetPromptResult:
         return _get_prompt(name)
 ```
 
-- [ ] **Step 5: 运行 prompt 测试**
+- [x] **Step 5: 运行 prompt 测试**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_mcp_prompts.py -v
@@ -362,7 +362,7 @@ def _get_prompt(name: str) -> GetPromptResult:
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```powershell
 git add computer_use/mcp_server.py tests/test_mcp_prompts.py
@@ -377,7 +377,7 @@ git commit -m "feat: expose computer-use guidance as mcp prompts"
 - Modify: `computer_use/mcp_server.py`
 - Test: `tests/test_mcp_server.py`
 
-- [ ] **Step 0: 前置审计：确认代码库实际命名**
+- [x] **Step 0: 前置审计：确认代码库实际命名**
 
 在写测试或改实现前，先读取以下文件并记录实际命名；若发现计划中的工具名/函数名与代码不一致，用实际名称替换 Step 1–Step 5 与 Task 6 中的对应名称。
 
@@ -391,7 +391,7 @@ git commit -m "feat: expose computer-use guidance as mcp prompts"
 
 审计后应形成一份实际名称清单，再进入 Step 1。
 
-- [ ] **Step 1: 写工具描述漂移守卫**
+- [x] **Step 1: 写工具描述漂移守卫**
 
 在 `tests/test_mcp_server.py` 追加：
 
@@ -407,7 +407,7 @@ def test_distribution_critical_tool_descriptions_include_usage_guidance() -> Non
     assert "source of truth" in by_name["review_task_session"].description.lower()
 ```
 
-- [ ] **Step 2: 运行并确认 RED**
+- [x] **Step 2: 运行并确认 RED**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_mcp_server.py -k "distribution_critical_tool_descriptions" -v
@@ -415,7 +415,7 @@ def test_distribution_critical_tool_descriptions_include_usage_guidance() -> Non
 
 Expected: FAIL，现有描述还没有覆盖所有关键词。
 
-- [ ] **Step 3: 审计并修改关键工具 description**
+- [x] **Step 3: 审计并修改关键工具 description**
 
 先审计 `tests/test_mcp_server.py`：搜索对 `tool.description` 的精确全文断言（如 `assert tool.description == "..."`）。若存在，先改为关键字/子串断言（如 `assert "multimodal" in tool.description.lower()`），避免修改 description 后既有测试失败。当前测试仅做 schema/枚举/关键字检查，未发现精确 description 全文断言；审计通过后可继续修改 description。
 
@@ -427,7 +427,7 @@ Expected: FAIL，现有描述还没有覆盖所有关键词。
 - `start_task`：加入 “Use the returned task_id on subsequent calls for auditability.”
 - `review_task_session`：加入 “Use returned task evidence as the source of truth.”
 
-- [ ] **Step 4: 给常见错误响应补 next_action**
+- [x] **Step 4: 给常见错误响应补 next_action**
 
 在不改变 error_kind 的前提下，给以下错误结果追加 `next_action`。
 
@@ -449,7 +449,7 @@ Expected: FAIL，现有描述还没有覆盖所有关键词。
 
 若当前错误由异常字符串构造，优先保持原 error 字段不变，只增加结构化建议字段。
 
-- [ ] **Step 5: 写 next_action 测试**
+- [x] **Step 5: 写 next_action 测试**
 
 ```python
 import json
@@ -530,7 +530,7 @@ def test_coordinate_value_error_includes_next_action(monkeypatch) -> None:
     assert "get_monitors" in data["next_action"] or "inspect_point" in data["next_action"]
 ```
 
-- [ ] **Step 6: 运行聚焦测试**
+- [x] **Step 6: 运行聚焦测试**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_mcp_server.py -k "distribution_critical_tool_descriptions or next_action or invalid_tool or ui_not_found or fail_safe or safety_block" -v
@@ -538,7 +538,7 @@ def test_coordinate_value_error_includes_next_action(monkeypatch) -> None:
 
 Expected: PASS。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```powershell
 git add computer_use/mcp_server.py tests/test_mcp_server.py
@@ -554,7 +554,7 @@ git commit -m "feat: make tool guidance actionable for distributed clients"
 - Modify: `computer_use/cli.py`
 - Test: `tests/test_cli.py`
 
-- [ ] **Step 0: 审计 `computer_use/cli.py` 顶层导入**
+- [x] **Step 0: 审计 `computer_use/cli.py` 顶层导入**
 
 读取 `computer_use/cli.py`，检查是否存在模块级导入：
 
@@ -576,7 +576,7 @@ if args.cmd in ("click", "move", "scroll", "type", "key", "screenshot", "size", 
 
 记录审计结论（如发现的具体导入行号）供 reviewer 复查；确认无顶层导入后再进入下一步。
 
-- [ ] **Step 1: 写 RED 测试**
+- [x] **Step 1: 写 RED 测试**
 
 在 `tests/test_cli.py` 追加：
 
@@ -634,7 +634,7 @@ def test_cli_doctor_outputs_json_without_input_device_import(
     assert "computer_use.core" not in sys.modules
 ```
 
-- [ ] **Step 2: 运行并确认 RED**
+- [x] **Step 2: 运行并确认 RED**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_cli.py -k doctor -v
@@ -642,7 +642,7 @@ def test_cli_doctor_outputs_json_without_input_device_import(
 
 Expected: FAIL，`doctor` 命令尚不存在。
 
-- [ ] **Step 3: 实现 `computer_use/doctor.py`**
+- [x] **Step 3: 实现 `computer_use/doctor.py`**
 
 实现环境和配置自检。为验证目录可写性，会执行一次**良性写探测**（`path.mkdir(parents=True, exist_ok=True)`），不发送鼠标或键盘输入，也不写入任何用户数据：
 
@@ -724,7 +724,7 @@ def run_doctor() -> dict[str, Any]:
 - 使用 `getattr(config, key, None)` 与 `config.get(key)` 的防御式访问，兼容 dict 与 dataclass/object；键缺失时记录 failed check 而非抛出异常。
 - `guidance.MODEL_CAPABILITY_WARNING` 和 `guidance.DOCTOR_NEXT_STEPS` 来自单一事实源，避免 doctor 与 prompts/docs 漂移。
 
-- [ ] **Step 4: 在 CLI 增加 `doctor` 命令**
+- [x] **Step 4: 在 CLI 增加 `doctor` 命令**
 
 在 `main()` 的 argparse 初始化处增加：
 
@@ -743,7 +743,7 @@ sub.add_parser("doctor", help="Run installation diagnostics and benign write pro
         return 0 if result["status"] != "failed" else 1
 ```
 
-- [ ] **Step 5: 运行 CLI 测试**
+- [x] **Step 5: 运行 CLI 测试**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_cli.py -v
@@ -751,7 +751,7 @@ sub.add_parser("doctor", help="Run installation diagnostics and benign write pro
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```powershell
 git add computer_use/doctor.py computer_use/cli.py tests/test_cli.py
@@ -773,7 +773,7 @@ git commit -m "feat: add installation doctor with benign write probe"
 - Modify: `docs/pitfalls.md`
 - Modify: `STRUCTURE.md`
 
-- [ ] **Step 1: 创建客户端示例模板**
+- [x] **Step 1: 创建客户端示例模板**
 
 以下文件为模板，不是可直接使用的配置。用户必须将 `<ABSOLUTE_PATH_TO_PROJECT>` 替换为自己克隆仓库的绝对路径。
 
@@ -814,7 +814,7 @@ Operate with: observe -> semantic/UIA targeting -> action -> verify -> trace/tas
 Do not bypass MCP safety with pyautogui scripts.
 ```
 
-- [ ] **Step 2: README 改造为安装后路径**
+- [x] **Step 2: README 改造为安装后路径**
 
 在 README 中新增或替换为 **英文节标题 `## First run`**（允许在中文文档中保留英文标题，或在 `## First run` 后加括号中文说明）。该节必须包含以下关键短语（可直接使用英文）：
 
@@ -845,7 +845,7 @@ Do not bypass MCP safety with pyautogui scripts.
 
 若原 README 存在 `## Register with an MCP Client` 或 `## Agent guidance` 等旧节，可将其内容合并到 `## First run` 或在其后保留为子说明，但首屏流程必须以 `## First run` 呈现。
 
-- [ ] **Step 3: 更新 API / deployment / pitfalls**
+- [x] **Step 3: 更新 API / deployment / pitfalls**
 
 `docs/api.md`：
 
@@ -876,7 +876,7 @@ Do not bypass MCP safety with pyautogui scripts.
 
 - 增加 `docs/agent-usage.md` 和 `examples/clients/` 入口。
 
-- [ ] **Step 4: 文档检查**
+- [x] **Step 4: 文档检查**
 
 ```powershell
 python scripts\audit.py check
@@ -885,7 +885,7 @@ python scripts\agent_links.py check
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add README.md docs examples STRUCTURE.md
@@ -901,7 +901,7 @@ git commit -m "docs: document out-of-box client onboarding"
 - Modify: `docs/deployment.md`
 - Test: `tests/test_smoke_script.py`
 
-- [ ] **Step 1: 创建 smoke 脚本**
+- [x] **Step 1: 创建 smoke 脚本**
 
 `tools/smoke_mcp_client.py` 目标：不发送鼠标键盘输入，只验证 MCP server 能启动、列 tools、列 prompts，并可调用只读工具 `get_monitors`（名称经 Task 3 Step 0 审计确认）。
 
@@ -1043,7 +1043,7 @@ if __name__ == "__main__":
 - 失败输出 `{"status": "failed", "error": ..., "stderr": ...}`；成功输出 `{"status": "ok", "tools": ..., "prompts": ..., "monitors": ...}`。
 - 脚本不调用任何鼠标/键盘工具，只读验证。
 
-- [ ] **Step 2: 写脚本导入测试**
+- [x] **Step 2: 写脚本导入测试**
 
 ```python
 def test_smoke_script_import_does_not_load_pyautogui() -> None:
@@ -1063,7 +1063,7 @@ def test_smoke_script_import_does_not_load_pyautogui() -> None:
     assert "pyautogui" not in sys.modules
 ```
 
-- [ ] **Step 3: 文档接入**
+- [x] **Step 3: 文档接入**
 
 在 `docs/deployment.md` 增加：
 
@@ -1073,7 +1073,7 @@ python tools\smoke_mcp_client.py --server .\.venv\Scripts\python.exe --args -m c
 
 说明 smoke test 不点击、不输入，只验证协议和只读工具。
 
-- [ ] **Step 4: 运行测试并提交**
+- [x] **Step 4: 运行测试并提交**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_cli.py tests/test_smoke_script.py -v
@@ -1088,7 +1088,7 @@ git commit -m "test: add read-only mcp smoke check"
 **Files:**
 - Test: `tests/test_distribution_readiness.py`
 
-- [ ] **Step 1: 创建分发就绪测试**
+- [x] **Step 1: 创建分发就绪测试**
 
 `tests/test_distribution_readiness.py`：
 
@@ -1139,7 +1139,7 @@ def test_examples_do_not_hardcode_kimi_as_only_client() -> None:
     assert "Kimi" not in before_first_run
 ```
 
-- [ ] **Step 2: 运行并修复文档**
+- [x] **Step 2: 运行并修复文档**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_distribution_readiness.py -v
@@ -1147,7 +1147,7 @@ def test_examples_do_not_hardcode_kimi_as_only_client() -> None:
 
 Expected: PASS。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```powershell
 git add tests/test_distribution_readiness.py README.md docs examples
@@ -1163,7 +1163,7 @@ git commit -m "test: guard distribution guidance entrypoints"
 - Move after acceptance: `docs/plans/active/mcp-distribution-out-of-box-usage.md` to `docs/plans/completed/`
 - Modify: `docs/CURRENT.md`
 
-- [ ] **Step 1: 全量自动化验证**
+- [x] **Step 1: 全量自动化验证**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/ -v
@@ -1180,7 +1180,7 @@ Expected:
 - agent links 和 audit 通过。
 - diff check 无空白错误。
 
-- [ ] **Step 2: 手动只读 smoke**
+- [x] **Step 2: 手动只读 smoke**
 
 ```powershell
 python -m computer_use doctor
@@ -1193,7 +1193,7 @@ Expected:
 - 若环境可用，`status=ok`；如 UIA 可选依赖不可用，可为 warning。
 - 命令不移动鼠标、不点击、不输入。
 
-- [ ] **Step 3: MCP prompt 验收**
+- [x] **Step 3: MCP prompt 验收**
 
 用 MCP Inspector 或当前测试 helper 验证：
 
@@ -1201,13 +1201,13 @@ Expected:
 - `prompts/get computer_use_guidance` 返回包含多模态要求、text-only 限制、标准执行闭环和安全规则的文本。
 - `tools/list` 的 `screenshot`、`click`、`batch`、`start_task`、`review_task_session` 描述包含关键使用纪律。
 
-- [ ] **Step 4: CHANGELOG**
+- [x] **Step 4: CHANGELOG**
 
 ```powershell
 python scripts\changelog.py add --title "feat: 提升 MCP 分发开箱可用性" --body "新增 MCP prompts、安装 doctor、只读 smoke、通用客户端示例和分发就绪测试，让用户注册 MCP 后可直接发现正确使用路径；强化工具描述和错误 next_action，降低纯文本模型误用与盲点操作风险。"
 ```
 
-- [ ] **Step 5: 独立审计**
+- [x] **Step 5: 独立审计**
 
 Reviewer 检查：
 
@@ -1217,7 +1217,7 @@ Reviewer 检查：
 - 工具错误响应包含可执行 next action，不改变既有 error_kind。
 - 没有放宽任何安全边界。
 
-- [ ] **Step 6: 归档计划**
+- [x] **Step 6: 归档计划**
 
 Reviewer 通过后：
 

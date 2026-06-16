@@ -6,6 +6,15 @@
 - 当前工作状态写在 docs/CURRENT.md；CHANGELOG 只记录历史变更。
 -->
 
+## 2026-06-17
+
+### feat: 提升 MCP 分发开箱可用性
+
+#### 变更内容
+- 新增 MCP prompts、安装 doctor、只读 smoke、通用客户端示例和分发就绪测试，让用户注册 MCP 后可直接发现正确使用路径；强化工具描述和错误 next_action，降低纯文本模型误用与盲点操作风险。
+
+---
+
 ## 2026-06-16
 
 ### fix: 完成 MCP 安全边界 Converge 验收
