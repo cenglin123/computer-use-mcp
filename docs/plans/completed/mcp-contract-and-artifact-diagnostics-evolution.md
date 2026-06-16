@@ -1104,3 +1104,12 @@ Move-Item docs/plans/active/mcp-contract-and-artifact-diagnostics-evolution.md d
 - B5 改变了 snapshot 截图在 trace 上下文中的落点（从 `snapshots/` 改到 `screenshots/`）。`retry_step`/`review_task` 等历史代码若曾假设 snapshot 截图在 `snapshots/`，需在 Task 6 一并核对（目前无此类假设）。
 - manifest 扫描会增加少量文件系统访问，但每个 trace 的产物规模受步骤预算限制，可接受。
 - 全局回退目录 `<trace_dir>/snapshots`（无 trace 上下文时）历史文件不迁移、不删除；仅在 trace 上下文内停止向 `snapshots/` 写截图（改写 `screenshots/`）。两层语义（全局回退 vs trace 内按类型分目录）须在文档区分。
+
+## 实施结果
+
+- 状态：已完成并归档。
+- 关键提交：`fab6e37`、`51c950e`、`b92c507`、`7bfea53`、`c70ea6b`、`89f95f7`、`771cb26`、`bb7fa3f`。
+- 自动验收：`.\.venv\Scripts\python.exe -m pytest tests/ -v` 通过，结果 `280 passed, 1 skipped`。
+- 静态验收：`.\.venv\Scripts\python.exe -m compileall -q computer_use` 通过；`git diff --check` 通过。
+- 文档验收：`python scripts/audit.py check` 与 `python scripts/agent_links.py check` 通过。
+- 真实按键重放：未主动发送 `press_key`，避免对当前 Windows 焦点产生真实键盘输入；同等契约由自动化回归覆盖。
