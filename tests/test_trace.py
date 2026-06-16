@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -50,7 +51,7 @@ def test_record_step_writes_trace_file(tmp_trace_dir: Path) -> None:
     assert records[0]["error_kind"] is None
     assert records[0]["error_message"] is None
 
-    trace_file = tmp_trace_dir / trace_id / "trace.jsonl"
+    trace_file = trace.trace_root(trace_id) / "trace.jsonl"
     assert trace_file.exists()
 
 
@@ -89,6 +90,50 @@ def test_artifact_manifest_lists_only_existing_files(tmp_trace_dir: Path) -> Non
     }
 
 
+def test_create_trace_root_partitions_by_date_and_registers_locator(
+    tmp_trace_dir: Path,
+) -> None:
+    root = trace.create_trace_root(
+        "partitioned-trace",
+        created_at=datetime(2026, 6, 16, 1, 2, tzinfo=timezone.utc),
+    )
+
+    assert root == tmp_trace_dir / "2026" / "06" / "16" / "partitioned-trace"
+    assert trace.resolve_trace_root("partitioned-trace") == root
+    assert (tmp_trace_dir / ".index").is_dir()
+
+
+def test_read_trace_supports_legacy_flat_layout(tmp_trace_dir: Path) -> None:
+    legacy = tmp_trace_dir / "legacy-trace"
+    legacy.mkdir()
+    (legacy / "trace.jsonl").write_text(
+        '{"trace_id": "legacy-trace", "step_index": 1, "tool": "sleep"}\n',
+        encoding="utf-8",
+    )
+
+    assert trace.resolve_trace_root("legacy-trace") == legacy
+    assert trace.read_trace("legacy-trace")[0]["tool"] == "sleep"
+
+
+def test_write_trace_meta_records_task_id_and_created_at(
+    tmp_trace_dir: Path,
+) -> None:
+    trace.write_trace_meta("task-owned-trace", goal="demo", task_id="task-001")
+
+    meta = trace.read_trace_meta("task-owned-trace")
+    assert meta["schema_version"] == 1
+    assert meta["trace_id"] == "task-owned-trace"
+    assert meta["task_id"] == "task-001"
+    assert "created_at" in meta
+
+
+def test_write_trace_meta_rejects_conflicting_task_id(tmp_trace_dir: Path) -> None:
+    trace.write_trace_meta("conflict-trace", task_id="task-a")
+
+    with pytest.raises(ValueError, match="task_id"):
+        trace.write_trace_meta("conflict-trace", task_id="task-b")
+
+
 def test_read_trace_returns_empty_for_missing_trace(tmp_trace_dir: Path) -> None:
     assert trace.read_trace("does-not-exist") == []
 
@@ -116,7 +161,7 @@ def test_generate_report_creates_markdown(tmp_trace_dir: Path) -> None:
 
     report_path = trace.generate_report(trace_id, goal="Click the OK button")
     assert report_path.exists()
-    assert report_path.parent == tmp_trace_dir / trace_id
+    assert report_path.parent == trace.trace_root(trace_id)
     text = report_path.read_text(encoding="utf-8")
     assert trace_id in text
     assert "Click the OK button" in text

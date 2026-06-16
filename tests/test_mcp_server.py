@@ -1481,9 +1481,9 @@ def test_single_tool_call_records_trace(monkeypatch, tmp_path):
     data = json.loads(result)
     assert data["slept"] is True
 
-    trace_dirs = [d for d in tmp_path.iterdir() if d.is_dir()]
-    assert len(trace_dirs) == 1
-    trace_id = trace_dirs[0].name
+    trace_files = list(tmp_path.rglob("trace.jsonl"))
+    assert len(trace_files) == 1
+    trace_id = trace_files[0].parent.name
     records = trace_module.read_trace(trace_id)
     assert len(records) == 1
     assert records[0]["trace_id"] == trace_id
@@ -1599,9 +1599,9 @@ def test_composite_error_sets_error_kind_in_trace(monkeypatch, tmp_path):
     data = json.loads(result)
     assert data["error"] == "ui_not_found"
 
-    trace_dirs = [d for d in tmp_path.iterdir() if d.is_dir()]
-    assert len(trace_dirs) == 1
-    trace_id = trace_dirs[0].name
+    trace_files = list(tmp_path.rglob("trace.jsonl"))
+    assert len(trace_files) == 1
+    trace_id = trace_files[0].parent.name
     records = trace_module.read_trace(trace_id)
     assert len(records) == 1
     assert records[0]["error_kind"] == "ui_not_found"
@@ -1662,13 +1662,12 @@ def test_mcp_run_task_plan_uses_single_trace(monkeypatch, tmp_path):
         )
     )
 
-    trace_dirs = [path for path in tmp_path.iterdir() if path.is_dir()]
-    assert len(trace_dirs) == 1
-    assert trace_dirs[0].name == data["trace_id"]
+    trace_root = trace_module.resolve_trace_root(data["trace_id"])
+    assert trace_root is not None
     records = trace_module.read_trace(data["trace_id"])
     assert [record["tool"] for record in records] == ["sleep"]
-    assert data["trace_path"] == str(tmp_path / data["trace_id"] / "trace.jsonl")
-    assert data["artifact_root"] == str(tmp_path / data["trace_id"])
+    assert data["trace_path"] == str(trace_root / "trace.jsonl")
+    assert data["artifact_root"] == str(trace_root)
     assert data["artifacts"]["report"] == data["report_path"]
 
 
@@ -1692,11 +1691,11 @@ def test_mcp_run_task_plan_with_explicit_id_uses_single_trace(
         )
     )
 
-    trace_dirs = [path for path in tmp_path.iterdir() if path.is_dir()]
     assert data["trace_id"] == "explicit-trace"
-    assert [path.name for path in trace_dirs] == ["explicit-trace"]
+    trace_root = trace_module.resolve_trace_root("explicit-trace")
+    assert trace_root is not None
     report_path = Path(data["report_path"])
-    assert report_path.parent == tmp_path / "explicit-trace"
+    assert report_path.parent == trace_root
     assert report_path.exists()
 
 
@@ -1712,10 +1711,12 @@ def test_review_task_response_uses_reviewed_trace_manifest(tmp_path, monkeypatch
     )
 
     data = json.loads(_call_tool("review_task", {"trace_id": "review-manifest"}))
+    trace_root = trace_module.resolve_trace_root("review-manifest")
 
     assert data["trace_id"] == "review-manifest"
-    assert data["trace_path"] == str(tmp_path / "review-manifest" / "trace.jsonl")
-    assert data["artifact_root"] == str(tmp_path / "review-manifest")
+    assert trace_root is not None
+    assert data["trace_path"] == str(trace_root / "trace.jsonl")
+    assert data["artifact_root"] == str(trace_root)
     assert data["artifacts"] == {
         "screenshots": [],
         "snapshots": [],
@@ -1810,6 +1811,6 @@ def test_fail_safe_returns_structured_error_and_trace(
     data = json.loads(_call_tool("click", {"x": 10, "y": 10}))
 
     assert data["error"] == "fail_safe"
-    trace_id = next(path.name for path in tmp_path.iterdir() if path.is_dir())
+    trace_id = next(path.parent.name for path in tmp_path.rglob("trace.jsonl"))
     record = trace_module.read_trace(trace_id)[0]
     assert record["error_kind"] == "fail_safe"

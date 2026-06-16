@@ -95,6 +95,7 @@ def run_task_plan(
     _validate_task_steps(steps)
 
     trace_id = trace_id or trace_module.generate_trace_id()
+    trace_module.create_trace_root(trace_id)
     if goal is not None:
         trace_module.write_trace_meta(trace_id, goal=goal)
     results: list[dict[str, Any]] = []

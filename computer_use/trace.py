@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from computer_use import audit_store
 from computer_use.config import load_config
 
 
@@ -65,12 +66,42 @@ def validate_trace_id(trace_id: str) -> str:
     return trace_id
 
 
-def trace_root(trace_id: str) -> Path:
-    """Return ``<trace_dir>/<trace_id>`` creating the trace root only."""
+def create_trace_root(
+    trace_id: str,
+    *,
+    created_at: datetime | None = None,
+) -> Path:
+    """Create and locate a date-partitioned trace root."""
     validate_trace_id(trace_id)
-    root = trace_dir() / trace_id
+    base = trace_dir()
+    moment = created_at or datetime.now().astimezone()
+    root = base / audit_store.partition_for(moment) / trace_id
     root.mkdir(parents=True, exist_ok=True)
+    audit_store.register_location(base, trace_id, root)
     return root
+
+
+def resolve_trace_root(trace_id: str) -> Path | None:
+    """Resolve a trace root through locator index or legacy flat layout."""
+    validate_trace_id(trace_id)
+    base = trace_dir()
+    located = audit_store.resolve_location(base, trace_id)
+    if located is not None:
+        return located
+    legacy = base / trace_id
+    if legacy.exists():
+        return legacy
+    return None
+
+
+def trace_root(trace_id: str, *, create: bool = True) -> Path:
+    """Return a trace root, creating date-partitioned storage by default."""
+    root = resolve_trace_root(trace_id)
+    if root is not None:
+        return root
+    if create:
+        return create_trace_root(trace_id)
+    raise FileNotFoundError(f"trace not found: {trace_id}")
 
 
 def artifact_dir(trace_id: str, kind: str) -> Path:
@@ -85,7 +116,7 @@ def artifact_dir(trace_id: str, kind: str) -> Path:
 def artifact_manifest(trace_id: str) -> dict[str, Any]:
     """Return existing trace artifact paths without creating missing files."""
     validate_trace_id(trace_id)
-    root = trace_dir() / trace_id
+    root = resolve_trace_root(trace_id) or (trace_dir() / trace_id)
     trace_path = root / "trace.jsonl"
     report_path = root / "report.md"
 
@@ -105,13 +136,40 @@ def artifact_manifest(trace_id: str) -> dict[str, Any]:
     }
 
 
-def write_trace_meta(trace_id: str, goal: str | None = None) -> Path:
+def write_trace_meta(
+    trace_id: str,
+    goal: str | None = None,
+    *,
+    task_id: str | None = None,
+) -> Path:
     """Persist task metadata such as the goal to ``<trace_id>/meta.json``."""
     root = trace_root(trace_id)
     meta_path = root / "meta.json"
-    data: dict[str, Any] = {"trace_id": trace_id}
+    existing = read_trace_meta(trace_id)
+    existing_task_id = existing.get("task_id")
+    if (
+        task_id is not None
+        and existing_task_id is not None
+        and existing_task_id != task_id
+    ):
+        raise ValueError("trace_id is already associated with a different task_id")
+
+    data: dict[str, Any] = {
+        "schema_version": 1,
+        "trace_id": trace_id,
+        "created_at": existing.get(
+            "created_at",
+            datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+        ),
+    }
     if goal is not None:
         data["goal"] = goal
+    elif "goal" in existing:
+        data["goal"] = existing["goal"]
+    if task_id is not None:
+        data["task_id"] = task_id
+    elif existing_task_id is not None:
+        data["task_id"] = existing_task_id
     meta_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return meta_path
 
@@ -119,7 +177,10 @@ def write_trace_meta(trace_id: str, goal: str | None = None) -> Path:
 def read_trace_meta(trace_id: str) -> dict[str, Any]:
     """Read task metadata for ``trace_id`` if it exists."""
     validate_trace_id(trace_id)
-    meta_path = trace_dir() / trace_id / "meta.json"
+    root = resolve_trace_root(trace_id)
+    if root is None:
+        return {}
+    meta_path = root / "meta.json"
     if not meta_path.exists():
         return {}
     try:
@@ -279,7 +340,10 @@ def record_step(
 def read_trace(trace_id: str) -> list[dict[str, Any]]:
     """Read all records for a trace ID."""
     validate_trace_id(trace_id)
-    trace_file = trace_dir() / trace_id / "trace.jsonl"
+    root = resolve_trace_root(trace_id)
+    if root is None:
+        return []
+    trace_file = root / "trace.jsonl"
     if not trace_file.exists():
         return []
     with open(trace_file, "r", encoding="utf-8") as f:
@@ -293,7 +357,7 @@ def generate_report(
 ) -> Path:
     """Generate a human-readable ``report.md`` for a completed task."""
     records = read_trace(trace_id)
-    root = trace_root(trace_id)
+    root = trace_root(trace_id, create=False)
     report_path = root / "report.md"
 
     lines: list[str] = [
