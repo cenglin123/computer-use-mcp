@@ -5,12 +5,12 @@
 
 ## 当前任务
 
-无。
+规划 MCP 分发开箱可用性改造，计划文件：`docs/plans/active/mcp-distribution-out-of-box-usage.md`。
 
 ## 计划
 
-无。
+等待用户评审计划后决定是否进入执行。
 
 ## 下一步
 
-等待新任务。
+评审并确认 `docs/plans/active/mcp-distribution-out-of-box-usage.md`。
