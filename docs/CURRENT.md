@@ -5,14 +5,12 @@
 
 ## 当前任务
 
-执行业务任务会话 trace 审计计划。
+无。
 
 ## 计划
 
-- `docs/plans/active/business-task-session-trace-audit.md`
-  - 状态：实施中。
-  - 范围：业务任务会话、日期分区、task 生命周期和审计查询。
+无。
 
 ## 下一步
 
-按 TDD 执行业务任务会话计划，并以已完成的 trace artifact manifest 为基线。
+等待新任务。

@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **完成记录（2026-06-16）**：已实施并归档。最终验证：专项测试 `155 passed, 1 skipped`；完整测试 `307 passed, 1 skipped`；`python -m compileall -q computer_use`、`git diff --check`、`python scripts/agent_links.py check`、`python scripts/audit.py check` 均通过。安全手工 MCP 验证使用临时 `trace_dir/task_dir` 和 `sleep` 观察调用完成，模拟重启后 A/B/standalone 三个 task 均可按 `task_id` 查询和复盘，trace 数量分别为 2/1/1，未串任务。执行中发现并修复 `task_dir` 配置未加载问题，见 `docs/problems/bugfix/task-dir-config-not-loaded.md`。
+
 **Goal:** 为一天内连续执行的多个业务任务建立明确、可查询、可审计的任务会话边界，使每条 trace 都能回答“属于哪个业务任务、该任务执行了哪些调用、最终状态如何、证据在哪里”。
 
 **Architecture:** 保留 trace 作为一次顶层工具调用的执行记录，在其上新增显式 `task_id` 业务任务会话。trace 按本地业务日期物理分区，task 目录保存生命周期元数据和 trace 归属文件；通过按 ID 哈希命名的可重建定位索引支持自定义 ID、跨日任务和旧扁平目录兼容。MCP 不维护进程全局“当前任务”，调用方通过显式 `task_id` 跨回合关联；未提供 `task_id` 时自动创建并完成 standalone task。
