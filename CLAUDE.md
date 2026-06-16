@@ -1,4 +1,4 @@
-:# AI 协作规范
+# AI 协作规范
 
 <!-- AGENTS.md 是主副本。编辑后运行：python scripts/agent_links.py repair -->
 > 本文件会被 AI 框架自动加载并始终驻留在上下文中，因此必须保持精简。

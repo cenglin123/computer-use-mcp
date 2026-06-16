@@ -2,6 +2,10 @@
 
 A local MCP server that gives AI agents the ability to see and control a Windows desktop through screenshots, UI Automation, and mouse/keyboard actions.
 
+## Model requirement
+
+This server is intended for multimodal agents. The MCP `screenshot` tool returns a local PNG path, so the client/model must be able to open and understand image files to perform visual GUI tasks. A text-only model can still call structured tools such as `get_monitors`, `find_control`, task review, or audit commands, but it cannot reliably use screenshots to decide where to click.
+
 ## What it does
 
 - Takes screenshots of your desktop and returns saved local file paths to MCP clients.
