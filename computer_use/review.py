@@ -91,3 +91,37 @@ def review_task(trace_id: str) -> dict[str, Any]:
 def generate_deterministic_report(trace_id: str, goal: str | None = None) -> Path:
     """Generate ``report.md`` using the existing trace report generator."""
     return trace_module.generate_report(trace_id, goal=goal)
+
+
+def review_task_session(task_id: str) -> dict[str, Any]:
+    """Generate a deterministic summary for a business task session."""
+    from computer_use import task_session
+
+    task = task_session.get_task(task_id)
+    reviewed_traces: list[dict[str, Any]] = []
+    error_distribution: dict[str, int] = {}
+    total_steps = 0
+    for link in task.get("traces", []):
+        trace_id = link.get("trace_id")
+        if not isinstance(trace_id, str):
+            continue
+        trace_review = review_task(trace_id)
+        if trace_review.get("error"):
+            reviewed_traces.append({**link, "review": trace_review})
+            continue
+        total_steps += trace_review["summary"]["total_steps"]
+        for kind, count in trace_review.get("error_distribution", {}).items():
+            error_distribution[kind] = error_distribution.get(kind, 0) + count
+        reviewed_traces.append({**link, "review": trace_review})
+
+    return {
+        "task_id": task_id,
+        "goal": task.get("goal"),
+        "status": task.get("status"),
+        "trace_count": task.get("trace_count", 0),
+        "failed_trace_count": task.get("failed_trace_count", 0),
+        "active_trace_count": task.get("active_trace_count", 0),
+        "total_steps": total_steps,
+        "error_distribution": error_distribution,
+        "traces": reviewed_traces,
+    }

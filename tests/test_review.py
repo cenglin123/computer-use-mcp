@@ -5,12 +5,14 @@ from __future__ import annotations
 import pytest
 
 from computer_use import review as review_mod
+from computer_use import task_session
 from computer_use import trace as trace_module
 
 
 @pytest.fixture(autouse=True)
 def _patch_trace_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path)
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
 
 
 def test_review_task_summarizes_trace(tmp_path) -> None:
@@ -61,3 +63,18 @@ def test_review_task_summarizes_trace(tmp_path) -> None:
 def test_review_task_missing_trace() -> None:
     result = review_mod.review_task("missing")
     assert result["error"] == "trace_not_found"
+
+
+def test_review_task_session_summarizes_task_traces() -> None:
+    task_id = task_session.start_task("session")["task_id"]
+    trace_module.record_step("trace-a", 1, "sleep", {"duration": 0})
+    task_session.register_trace(task_id, "trace-a", kind="atomic", tool="sleep")
+    task_session.complete_trace(task_id, "trace-a", status="succeeded")
+
+    result = review_mod.review_task_session(task_id)
+
+    assert result["task_id"] == task_id
+    assert result["trace_count"] == 1
+    assert result["failed_trace_count"] == 0
+    assert result["traces"][0]["trace_id"] == "trace-a"
+    assert result["traces"][0]["review"]["summary"]["total_steps"] == 1

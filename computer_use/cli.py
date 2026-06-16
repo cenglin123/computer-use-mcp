@@ -7,21 +7,6 @@ import json
 import sys
 from collections.abc import Callable
 
-import pyautogui
-
-from computer_use.config import load_config
-from computer_use.core import (
-    DEFAULT_MOVE_DURATION,
-    click,
-    get_coordinate_system,
-    get_monitors,
-    key_combo,
-    move_to,
-    screenshot,
-    scroll,
-    type_text,
-    validate_duration,
-)
 from computer_use.safety import (
     SafetyError,
     check_target_window,
@@ -32,8 +17,73 @@ from computer_use.safety import (
 from computer_use.ui_automation import inspect_point
 
 
+DEFAULT_MOVE_DURATION = 0.2
+
+
+def load_config() -> dict:
+    from computer_use.config import load_config as _load_config
+
+    return _load_config()
+
+
+def get_coordinate_system():
+    from computer_use.core import get_coordinate_system as _get_coordinate_system
+
+    return _get_coordinate_system()
+
+
+def get_monitors():
+    from computer_use.core import get_monitors as _get_monitors
+
+    return _get_monitors()
+
+
+def screenshot(*args, **kwargs):
+    from computer_use.core import screenshot as _screenshot
+
+    return _screenshot(*args, **kwargs)
+
+
+def click(*args, **kwargs):
+    from computer_use.core import click as _click
+
+    return _click(*args, **kwargs)
+
+
+def move_to(*args, **kwargs):
+    from computer_use.core import move_to as _move_to
+
+    return _move_to(*args, **kwargs)
+
+
+def scroll(*args, **kwargs):
+    from computer_use.core import scroll as _scroll
+
+    return _scroll(*args, **kwargs)
+
+
+def type_text(*args, **kwargs):
+    from computer_use.core import type_text as _type_text
+
+    return _type_text(*args, **kwargs)
+
+
+def key_combo(*args, **kwargs):
+    from computer_use.core import key_combo as _key_combo
+
+    return _key_combo(*args, **kwargs)
+
+
+def validate_duration(*args, **kwargs):
+    from computer_use.core import validate_duration as _validate_duration
+
+    return _validate_duration(*args, **kwargs)
+
+
 def _current_logical_position() -> tuple[int, int]:
     """Return the current cursor position in physical virtual screen pixels."""
+    import pyautogui
+
     x, y = pyautogui.position()
     return int(x), int(y)
 
@@ -84,7 +134,48 @@ def main(argv: list[str] | None = None) -> int:
     p_key = sub.add_parser("key", help="Press key combination")
     p_key.add_argument("keys", nargs="+")
 
+    p_tasks = sub.add_parser("tasks", help="Audit business task sessions")
+    tasks_sub = p_tasks.add_subparsers(dest="tasks_cmd", required=True)
+    p_tasks_list = tasks_sub.add_parser("list", help="List task sessions as JSON")
+    p_tasks_list.add_argument("--date", default=None)
+    p_tasks_list.add_argument("--status", default=None)
+    p_tasks_list.add_argument("--limit", type=int, default=None)
+    p_tasks_show = tasks_sub.add_parser("show", help="Show one task session as JSON")
+    p_tasks_show.add_argument("task_id")
+    p_tasks_review = tasks_sub.add_parser("review", help="Review one task session as JSON")
+    p_tasks_review.add_argument("task_id")
+
+    p_audit = sub.add_parser("audit", help="Audit store maintenance")
+    audit_sub = p_audit.add_subparsers(dest="audit_cmd", required=True)
+    p_rebuild = audit_sub.add_parser("rebuild-index", help="Rebuild locator indexes")
+    p_rebuild.add_argument("--dry-run", action="store_true")
+
     args = parser.parse_args(argv)
+
+    if args.cmd == "tasks":
+        from computer_use import review, task_session
+
+        if args.tasks_cmd == "list":
+            print(json.dumps({"tasks": task_session.list_tasks(date=args.date, status=args.status, limit=args.limit)}))
+        elif args.tasks_cmd == "show":
+            print(json.dumps(task_session.get_task(args.task_id)))
+        elif args.tasks_cmd == "review":
+            print(json.dumps(review.review_task_session(args.task_id)))
+        return 0
+
+    if args.cmd == "audit":
+        if args.audit_cmd == "rebuild-index":
+            if args.dry_run:
+                print(json.dumps({"dry_run": True}))
+                return 0
+            from computer_use import audit_store, task_session, trace
+
+            print(json.dumps({
+                "traces": audit_store.rebuild_location_index(trace.trace_dir(), "trace_id"),
+                "tasks": audit_store.rebuild_location_index(task_session.task_dir(), "task_id"),
+            }))
+        return 0
+
     cs = get_coordinate_system()
 
     def _dispatch_mouse_subcommand(

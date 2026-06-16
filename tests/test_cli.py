@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import sys
 from types import SimpleNamespace
 
 from computer_use import cli
+from computer_use import task_session
 
 
 def test_cli_click_rejects_secondary_monitor_coordinate(monkeypatch, capsys) -> None:
@@ -31,3 +34,20 @@ def test_cli_click_rejects_secondary_monitor_coordinate(monkeypatch, capsys) -> 
     assert exit_code == 2
     assert "primary" in capsys.readouterr().err.lower()
     assert calls == []
+
+
+def test_cli_tasks_list_outputs_json_without_input_device_import(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    sys.modules.pop("pyautogui", None)
+    sys.modules.pop("computer_use.core", None)
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path)
+    task_session.start_task("audit")
+
+    exit_code = cli.main(["tasks", "list"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert output["tasks"][0]["goal"] == "audit"
+    assert "pyautogui" not in sys.modules
+    assert "computer_use.core" not in sys.modules
