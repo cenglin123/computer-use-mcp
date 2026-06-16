@@ -1,12 +1,13 @@
 # Agent 使用指南
 
-> 面向不支持 Skill 的通用 MCP 客户端。支持 Skill 的客户端可优先加载 `skills/computer-use/SKILL.md`。
+> 分发层指导优先级：MCP prompt `computer_use_guidance` > `skills/computer-use/SKILL.md` > 复制本页或 `examples/clients/agent-prompt.md` 到客户端提示词。
 
 ## 能力边界
 
 - 视觉 GUI 自动化需要多模态模型，或客户端具备读取本地 PNG 截图的能力。
 - 纯文本模型不能可靠完成“看截图定位并点击”的任务，只适合使用 UIA 结构化查询、任务会话、trace 复盘和审计工具。
 - MCP 工具会操作真实 Windows 鼠标和键盘，执行前必须确认目标窗口、坐标和安全边界。
+- 安装后先运行 `python -m computer_use doctor`，再做只读 smoke；不要把安装成功等同于模型具备看图能力。
 
 ## 推荐提示词
 
@@ -17,13 +18,13 @@ Use it only when the task requires observing or controlling the Windows desktop.
 For visual GUI tasks, you must be able to read local PNG screenshots returned by the screenshot tool. If you are a text-only model, do not attempt screenshot-based clicking; use only structured UIA, task, trace, and audit tools.
 
 Operate with this loop:
-1. Start a task session when the task needs auditability.
+1. Start a task session with start_task when the task needs auditability.
 2. Observe before acting with screenshot, get_ui_snapshot, find_control, wait_for_window, or wait_for_control.
 3. Prefer UIA/semantic targeting over raw coordinates.
 4. Use coordinates only after confirming the screenshot and monitor bounds.
 5. Use batch for short mechanical action sequences.
 6. Verify after every meaningful state change.
-7. Review and finish the task session with trace evidence when done.
+7. Review with review_task_session and finish the task session with trace evidence when done.
 
 Safety rules:
 - Treat mouse and keyboard tools as real user input.

@@ -61,6 +61,12 @@ MCP 客户端（如 Claude Desktop、Codex、Kimi Code 或其他支持 stdio MCP
 - **选择**：`screenshot` 工具把 PNG 保存到本地磁盘，只在响应里返回 `saved_path` 引用；多模态模型通过 `ReadMediaFile` 按需读取。
 - **取舍**：需要一轮额外工具调用来读图，但把图像数据从 MCP 调用和上下文里剥离，显著降低上下文压力。
 
+### 为什么引入 guidance 单一事实源
+
+- **场景**：公开分发后，不同 MCP 客户端对 prompts、Skill、文档和工具描述的支持不一致；如果每层各写一套使用纪律，容易漂移。
+- **选择**：`computer_use.guidance` 保存核心 agent 使用准则，MCP prompts、doctor、Skill 和通用文档围绕它派生或引用。安装后优先通过 MCP prompt `computer_use_guidance` 暴露给客户端。
+- **取舍**：仍需要维护 README 和文档中的上下文说明，但核心能力边界和标准执行闭环有了单一事实源。
+
 ### 为什么截图叠加当前光标标记
 
 - **场景**：自定义绘制界面缺少可靠 UIA 控件时，需要根据截图复盘实际光标落点，区分“坐标判断错误”和“控件未响应”。

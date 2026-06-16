@@ -9,6 +9,7 @@
 | 部署与配置 | [docs/deployment.md](docs/deployment.md) |
 | Agent 使用指南 | [docs/agent-usage.md](docs/agent-usage.md) |
 | Computer Use Skill | [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md) |
+| 客户端配置示例 | [examples/clients/agent-prompt.md](examples/clients/agent-prompt.md) |
 | 已知环境陷阱 | [docs/pitfalls.md](docs/pitfalls.md) |
 | 配置与命令白名单修复 | [docs/problems/bugfix/config-command-allowlist.md](docs/problems/bugfix/config-command-allowlist.md) |
 | 受控路径边界修复 | [docs/problems/bugfix/controlled-path-boundaries.md](docs/problems/bugfix/controlled-path-boundaries.md) |

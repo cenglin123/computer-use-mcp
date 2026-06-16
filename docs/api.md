@@ -9,6 +9,15 @@
 - 输入类工具只允许主显示器内的非负物理坐标。`core.py` 的最终公共输入原语强制执行该边界，显式坐标和依赖当前光标的输入均不能通过直接调用绕过；MCP/CLI 在此基础上继续执行目标窗口检查。副屏、负坐标和主屏外坐标会被拒绝。
 - **每个工具响应都包含 `timestamp`**（ISO 8601，UTC，毫秒精度），便于复盘时计算各步骤间隔。即使出错，返回的 `{"error": "..."}` 对象也带 `timestamp`。
 
+## MCP prompts
+
+MCP prompts 是分发层指导，用于让客户端安装 server 后直接发现正确使用方式；它不替代工具 schema、安全检查或运行时错误处理。
+
+- `computer_use_guidance`：完整 Windows GUI 操作纪律，包含多模态要求、标准闭环、安全规则和 trace/task 证据规则。
+- `computer_use_visual_task`：面向多模态模型的视觉 GUI 任务闭环。
+- `computer_use_text_only_limits`：面向纯文本模型的限制说明，只允许结构化 UIA、task、trace 和审计工具。
+- `computer_use_safety_checklist`：发送真实鼠标/键盘输入前的安全检查清单。
+
 ## 视觉理解工作流
 
 完整 GUI 自动化依赖多模态模型或客户端侧图片读取能力。`screenshot` 只返回本地 PNG 路径，纯文本模型无法理解截图内容，因此只能使用 UIA 结构化查询、任务审计等非视觉工具；凡是需要“看图定位”的任务都应由能读取图片的模型执行。

@@ -36,6 +36,17 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
+## First run
+
+1. Run `python -m computer_use doctor`.
+2. Register the MCP server in your client.
+   - Generic MCP client: see `examples/clients/generic-mcp.json`.
+   - Kimi Code: see `examples/clients/kimi-code.toml`.
+3. If your client supports MCP prompts, load `computer_use_guidance`.
+4. If your client supports Skills, load `skills/computer-use/SKILL.md`.
+5. Run read-only smoke tools first: `get_monitors`, `get_ui_snapshot`, `review_task_session` on an explicit task.
+6. Only then perform real mouse/keyboard tasks.
+
 ## Register with an MCP Client
 
 Use the Python interpreter from this checkout's virtual environment and run the server module over stdio.
@@ -65,7 +76,7 @@ Replace the path with the absolute path where you cloned this server. The server
 
 ## Agent guidance
 
-Agents that support Skills can load [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md) for safe operating discipline. Generic MCP clients can use [docs/agent-usage.md](docs/agent-usage.md) as a prompt snippet.
+Prefer MCP prompt `computer_use_guidance` when your client supports prompts. Agents that support Skills can load [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md) for safe operating discipline. Generic MCP clients can use [docs/agent-usage.md](docs/agent-usage.md) or [examples/clients/agent-prompt.md](examples/clients/agent-prompt.md) as a prompt snippet.
 
 ## Coordinate system
 

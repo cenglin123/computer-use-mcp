@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "computer-use": {
+      "command": "<ABSOLUTE_PATH_TO_PROJECT>\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "computer_use.mcp_server"]
+    }
+  }
+}

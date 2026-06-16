@@ -30,9 +30,34 @@ pip install -e .
 pytest tests/ -v
 
 # 本地调试 CLI
+python -m computer_use doctor
 python -m computer_use screenshot
 python -m computer_use click 100 100
 ```
+
+### 安装后自检
+
+先运行：
+
+```powershell
+python -m computer_use doctor
+```
+
+`doctor` 输出 JSON，检查平台、依赖、配置目录和模型能力提醒。它会创建/验证日志、截图、trace、task 目录是否可写，但不会发送鼠标或键盘输入。
+
+支持 MCP prompts 的客户端应加载 `computer_use_guidance`。不支持 prompts 或 Skill 的客户端，应复制 [docs/agent-usage.md](agent-usage.md) 或 [examples/clients/agent-prompt.md](../examples/clients/agent-prompt.md) 的提示词。
+
+安装后 smoke test 先用只读能力：
+
+```text
+1. get_monitors()
+2. get_ui_snapshot(scope="foreground")
+3. start_task(goal="smoke")
+4. review_task_session(task_id)
+5. finish_task(task_id, summary="smoke complete")
+```
+
+纯文本模型不得执行需要截图理解、图标识别、颜色判断或坐标选择的视觉 GUI 任务；这些任务必须交给能读取本地 PNG 截图的多模态模型。
 
 ### 作为 MCP 服务器使用
 
@@ -46,6 +71,14 @@ python -m computer_use click 100 100
 ```
 
 具体启动参数和传输方式以 `mcp_server.py` 当前实现为准。
+
+只读 MCP smoke 脚本：
+
+```powershell
+python tools\smoke_mcp_client.py --server .\.venv\Scripts\python.exe --args -m computer_use.mcp_server
+```
+
+该脚本只验证协议、`tools/list`、`prompts/list` 和只读 `get_monitors`，不点击、不输入。
 
 ## 持久化与备份
 

@@ -70,6 +70,18 @@
 - 上层多模态模型可直接读取 `screenshot` 返回的截图，自行估算坐标并调用 `click(x, y)` 等原子工具。
 - 对高频自定义绘制应用，可在 `docs/plans/` 中记录“视觉坐标 → 实际动作”映射表。
 
+## 安装 MCP 不等于模型具备看图能力
+
+**现象**：用户注册 MCP 后，让纯文本模型根据截图点击按钮，Agent 却无法判断界面布局或坐标。
+
+**原因**：MCP 只返回本地 PNG 路径，不内置视觉模型，也不把截图 base64 放入上下文。客户端和模型必须能读取本地图片，才能完成视觉 GUI 任务。
+
+**解决**：
+- 安装后先运行 `python -m computer_use doctor`，确认能力边界提醒。
+- 支持 MCP prompts 的客户端加载 `computer_use_guidance`。
+- 不支持 prompts/Skill 时，复制 `docs/agent-usage.md` 或 `examples/clients/agent-prompt.md` 到客户端提示词。
+- 纯文本模型只使用 `get_ui_snapshot`、`find_control`、task/trace 审计等结构化工具；需要看图定位时切换到多模态模型。
+
 ## Nested 工具名不是 MCP 外部名称
 
 **现象**：在 `batch.actions[].tool` 或 `run_task_plan.steps[].tool` 中传入 `computer-use_press_key`、`mcp__computer-use__press_key` 或拼写错误时，步骤失败。

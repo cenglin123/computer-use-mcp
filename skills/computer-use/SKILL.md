@@ -7,6 +7,8 @@ description: Guide for operating Windows desktop applications through the Comput
 
 Use this skill to operate Windows desktop applications through the `computer-use` MCP server safely and efficiently.
 
+If the MCP client supports prompts, also load `computer_use_guidance`; it is the protocol-level guidance entrypoint for clients that do not support Skills.
+
 ## Capability Boundary
 
 - Use a multimodal model, or a client that can open local PNG files, for visual GUI tasks.
