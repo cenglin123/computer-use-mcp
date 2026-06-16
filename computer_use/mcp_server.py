@@ -1290,9 +1290,20 @@ def _batch_tool(
             if stop_on_error:
                 break
 
+    top_level_error_kind = None
+    if failed_index is not None and failed_index < len(results):
+        failed_entry = results[failed_index]
+        failure = _failure_for_result(failed_entry.get("result", failed_entry))
+        if failure is not None:
+            top_level_error_kind = failure[0]
+
     response: dict[str, Any] = {
         "results": results,
+        "status": "failed" if failed_index is not None else "succeeded",
         "failed_index": failed_index,
+        "error_kind": top_level_error_kind,
+        "executed_count": len(results),
+        "requested_count": len(actions),
         "trace_id": trace_id,
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
     }

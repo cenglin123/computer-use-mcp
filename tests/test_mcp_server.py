@@ -180,6 +180,27 @@ def test_invalid_tool_is_recorded_with_dedicated_error_kind():
     assert records[-1]["error_kind"] == "invalid_tool"
 
 
+def test_batch_response_exposes_authoritative_failure_summary():
+    import computer_use.mcp_server as server
+
+    result = json.loads(
+        server._call_tool(
+            "batch",
+            {"actions": [{"tool": "bad_tool", "args": {}}]},
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["failed_index"] == 0
+    assert result["error_kind"] == "invalid_tool"
+    assert result["executed_count"] == 1
+    assert result["requested_count"] == 1
+    assert result["artifacts"]["screenshots"] == []
+    assert result["artifacts"]["snapshots"] == []
+    assert result["artifacts"]["report"] is None
+    assert result["trace_path"] is not None
+
+
 def test_get_monitors() -> None:
     result = _call_tool("get_monitors", {})
     data = json.loads(result)
