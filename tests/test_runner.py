@@ -343,48 +343,91 @@ def test_run_task_plan_writes_goal_meta(monkeypatch, tmp_path) -> None:
     assert meta.get("goal") == "open settings"
 
 
+def test_run_task_plan_normalizes_known_mcp_prefix_step(monkeypatch):
+    import computer_use.mcp_server as server
+
+    seen = []
+
+    def fake_dispatch_tool(name, args, cs, trace_id=None, parent_step_index=None):
+        seen.append(name)
+        return json.dumps({"called": name})
+
+    monkeypatch.setattr(server, "_dispatch_tool", fake_dispatch_tool)
+
+    result = runner_mod.run_task_plan(
+        steps=[{"tool": "computer-use_press_key", "args": {"key": "Down"}}],
+        trace_id="runner-alias",
+        goal="normalize",
+        capture_screenshots=False,
+    )
+
+    assert seen == ["press_key"]
+    assert result["results"][0]["requested_tool"] == "computer-use_press_key"
+    assert result["results"][0]["tool"] == "press_key"
+
+
+def test_run_task_plan_step_unknown_tool_returns_invalid_tool():
+    result = runner_mod.run_task_plan(
+        steps=[{"tool": "computer-use_press_keey", "args": {}}],
+        trace_id="runner-invalid",
+        capture_screenshots=False,
+    )
+
+    assert result["failed_index"] == 0
+    failure = result["results"][0]["result"]
+    assert failure["error"] == "invalid_tool"
+    assert "press_key" in failure["candidates"]
+
+
 def test_run_task_plan_rejects_nested_run_task_plan() -> None:
-    with pytest.raises(ValueError, match="run_task_plan"):
-        runner_mod.run_task_plan(
-            steps=[
-                {
-                    "tool": "run_task_plan",
-                    "args": {
-                        "steps": [
-                            {"tool": "sleep", "args": {"duration": 0}},
-                        ]
-                    },
-                }
-            ],
-            capture_screenshots=False,
-        )
+    result = runner_mod.run_task_plan(
+        steps=[
+            {
+                "tool": "run_task_plan",
+                "args": {
+                    "steps": [
+                        {"tool": "sleep", "args": {"duration": 0}},
+                    ]
+                },
+            }
+        ],
+        capture_screenshots=False,
+    )
+
+    assert result["failed_index"] == 0
+    assert result["results"][0]["result"]["error"] == "invalid_tool"
 
 
 def test_run_task_plan_rejects_run_task_plan_inside_batch() -> None:
-    with pytest.raises(ValueError, match="run_task_plan"):
-        runner_mod.run_task_plan(
-            steps=[
-                {
-                    "tool": "batch",
-                    "args": {
-                        "actions": [
-                            {
-                                "tool": "run_task_plan",
-                                "args": {
-                                    "steps": [
-                                        {
-                                            "tool": "sleep",
-                                            "args": {"duration": 0},
-                                        }
-                                    ]
-                                },
-                            }
-                        ]
-                    },
-                }
-            ],
-            capture_screenshots=False,
-        )
+    result = runner_mod.run_task_plan(
+        steps=[
+            {
+                "tool": "batch",
+                "args": {
+                    "actions": [
+                        {
+                            "tool": "run_task_plan",
+                            "args": {
+                                "steps": [
+                                    {
+                                        "tool": "sleep",
+                                        "args": {"duration": 0},
+                                    }
+                                ]
+                            },
+                        }
+                    ]
+                },
+            }
+        ],
+        capture_screenshots=False,
+    )
+
+    assert result["failed_index"] == 0
+    assert (
+        result["results"][0]["result"]["results"][0]["result"]["error"]
+        == "invalid_tool"
+    )
 
 
 def test_run_task_plan_rejects_expanded_step_budget() -> None:

@@ -56,6 +56,11 @@ from computer_use.ui_automation import (
     wait_for_window,
 )
 from computer_use import trace as trace_module
+from computer_use.tool_contract import (
+    BATCH_ACTION_TOOL_NAMES,
+    InvalidToolName,
+    normalize_nested_tool_name,
+)
 
 
 def _setup_logging(log_dir: Path | None = None) -> None:
@@ -556,7 +561,11 @@ TOOLS: list[Tool] = [
                     "items": {
                         "type": "object",
                         "properties": {
-                            "tool": {"type": "string", "description": "Name of the tool to call."},
+                            "tool": {
+                                "type": "string",
+                                "enum": list(BATCH_ACTION_TOOL_NAMES),
+                                "description": "Canonical nested tool name. Do not use MCP namespace prefixes.",
+                            },
                             "args": {"type": "object", "description": "Arguments for the tool."},
                             "capture_snapshot": {
                                 "type": "boolean",
@@ -1181,7 +1190,32 @@ def _batch_tool(
     failed_index: int | None = None
 
     for i, action in enumerate(actions):
-        tool_name = action.get("tool")
+        requested_tool = action.get("tool")
+        try:
+            tool_name = normalize_nested_tool_name(
+                requested_tool,
+                allowed_tools=BATCH_ACTION_TOOL_NAMES,
+            )
+        except InvalidToolName as exc:
+            results.append(
+                {
+                    "index": i,
+                    "tool": None,
+                    "requested_tool": requested_tool,
+                    "result": {
+                        "error": "invalid_tool",
+                        "requested_tool": exc.requested_tool,
+                        "candidates": exc.candidates,
+                        "allowed_tools": list(BATCH_ACTION_TOOL_NAMES),
+                    },
+                    "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+                }
+            )
+            failed_index = i
+            if stop_on_error:
+                break
+            continue
+
         tool_args = action.get("args") or {}
         capture_snapshot = action.get("capture_snapshot", False)
         snapshot_ref: Any = None
@@ -1195,21 +1229,6 @@ def _batch_tool(
                     snapshot_ref = _save_ui_snapshot(snapshot_result, trace_id)
             except Exception as exc:
                 snapshot_ref = {"error": str(exc)}
-
-        if tool_name in {"batch", "run_task_plan"}:
-            entry: dict[str, Any] = {
-                "index": i,
-                "tool": tool_name,
-                "error": f"Nested task tool {tool_name!r} is not supported.",
-                "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
-            }
-            if capture_snapshot and snapshot_ref is not None:
-                entry["snapshot"] = snapshot_ref
-            results.append(entry)
-            failed_index = i
-            if stop_on_error:
-                break
-            continue
 
         if parent_step_index is not None and parent_step_index != 0:
             sub_step_index = f"{parent_step_index}.{i + 1}"
@@ -1238,6 +1257,7 @@ def _batch_tool(
         step_entry: dict[str, Any] = {
             "index": i,
             "tool": tool_name,
+            "requested_tool": requested_tool,
             "result": result_data,
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         }

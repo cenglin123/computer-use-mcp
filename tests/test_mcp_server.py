@@ -95,6 +95,75 @@ def test_normalize_nested_tool_name_rejects_unknown_name():
     assert "press_key" in exc.value.candidates
 
 
+def test_batch_schema_enumerates_canonical_tool_names():
+    from computer_use.tool_contract import BATCH_ACTION_TOOL_NAMES
+
+    batch = next(tool for tool in TOOLS if tool.name == "batch")
+    tool_schema = batch.inputSchema["properties"]["actions"]["items"]["properties"]["tool"]
+
+    assert tool_schema["enum"] == list(BATCH_ACTION_TOOL_NAMES)
+    assert "computer-use_press_key" not in tool_schema["enum"]
+
+
+def test_batch_action_tool_names_match_tools_registry():
+    """Guard against drift between the nested allow-list and TOOLS."""
+    from computer_use.tool_contract import (
+        BATCH_ACTION_TOOL_NAMES,
+        _DIAGNOSTIC_TOOL_NAMES,
+        _ORCHESTRATION_TOOL_NAMES,
+    )
+
+    registered = {tool.name for tool in TOOLS}
+    excluded = _ORCHESTRATION_TOOL_NAMES | _DIAGNOSTIC_TOOL_NAMES
+
+    assert set(BATCH_ACTION_TOOL_NAMES) <= registered
+    assert set(BATCH_ACTION_TOOL_NAMES) == registered - excluded
+
+
+def test_batch_normalizes_known_mcp_prefix(monkeypatch):
+    import computer_use.mcp_server as server
+
+    calls = []
+    monkeypatch.setattr(
+        server,
+        "_call_tool",
+        lambda name, args, trace_context=None: calls.append(name)
+        or json.dumps({"pressed": True}),
+    )
+
+    result = json.loads(
+        server._batch_tool(
+            {"actions": [{"tool": "computer-use_press_key", "args": {"key": "Down"}}]},
+            trace_id="alias-batch",
+        )
+    )
+
+    assert calls == ["press_key"]
+    assert result["results"][0]["requested_tool"] == "computer-use_press_key"
+    assert result["results"][0]["tool"] == "press_key"
+
+
+def test_batch_returns_invalid_tool_with_candidates():
+    import computer_use.mcp_server as server
+
+    result = json.loads(
+        server._batch_tool(
+            {
+                "actions": [
+                    {"tool": "computer-use_press_keey", "args": {"key": "Down"}}
+                ]
+            },
+            trace_id="invalid-tool-batch",
+        )
+    )
+
+    failure = result["results"][0]["result"]
+    assert failure["error"] == "invalid_tool"
+    assert failure["requested_tool"] == "computer-use_press_keey"
+    assert "press_key" in failure["candidates"]
+    assert result["failed_index"] == 0
+
+
 def test_get_monitors() -> None:
     result = _call_tool("get_monitors", {})
     data = json.loads(result)
@@ -769,7 +838,8 @@ def test_batch_tool_rejects_nested_batch(monkeypatch) -> None:
     )
     data = json.loads(result)
     assert data["failed_index"] == 0
-    assert "error" in data["results"][0]
+    assert data["results"][0]["result"]["error"] == "invalid_tool"
+    assert data["results"][0]["requested_tool"] == "batch"
     assert calls == []
     assert "final_screenshot" not in data
 

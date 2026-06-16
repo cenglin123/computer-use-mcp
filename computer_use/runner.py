@@ -20,6 +20,11 @@ from computer_use.mcp_server import (
     _failure_for_result,
     _save_ui_snapshot,
 )
+from computer_use.tool_contract import (
+    InvalidToolName,
+    TASK_STEP_TOOL_NAMES,
+    normalize_nested_tool_name,
+)
 
 logger = logging.getLogger(__name__)
 MAX_TASK_STEPS = 100
@@ -31,18 +36,10 @@ def _validate_task_steps(steps: list[dict[str, Any]]) -> None:
         tool_name = step.get("tool")
         if not tool_name:
             raise ValueError(f"step {index} is missing 'tool'")
-        if tool_name == "run_task_plan":
-            raise ValueError("Nested run_task_plan is not supported")
 
         expanded_steps += 1
         if tool_name == "batch":
             actions = (step.get("args") or {}).get("actions") or []
-            for action in actions:
-                nested_tool = action.get("tool")
-                if nested_tool in {"batch", "run_task_plan"}:
-                    raise ValueError(
-                        f"Nested task tool {nested_tool!r} is not supported"
-                    )
             expanded_steps += len(actions)
 
     if expanded_steps > MAX_TASK_STEPS:
@@ -108,7 +105,30 @@ def run_task_plan(
     failed_index: int | None = None
 
     for i, step in enumerate(steps):
-        tool_name = step.get("tool")
+        requested_tool = step.get("tool")
+        try:
+            tool_name = normalize_nested_tool_name(
+                requested_tool,
+                allowed_tools=TASK_STEP_TOOL_NAMES,
+            )
+        except InvalidToolName as exc:
+            results.append(
+                {
+                    "index": i,
+                    "tool": None,
+                    "requested_tool": requested_tool,
+                    "result": {
+                        "error": "invalid_tool",
+                        "requested_tool": exc.requested_tool,
+                        "candidates": exc.candidates,
+                        "allowed_tools": list(TASK_STEP_TOOL_NAMES),
+                    },
+                    "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+                }
+            )
+            failed_index = i
+            break
+
         tool_args = step.get("args") or {}
         step_index = i + 1
 
@@ -133,6 +153,7 @@ def run_task_plan(
         entry: dict[str, Any] = {
             "index": i,
             "tool": tool_name,
+            "requested_tool": requested_tool,
             "result": result_data,
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         }
