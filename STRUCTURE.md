@@ -14,6 +14,7 @@
 | 任务调度与 trace 修复 | [docs/problems/bugfix/task-dispatch-trace-semantics.md](docs/problems/bugfix/task-dispatch-trace-semantics.md) |
 | trace 脱敏与 fail-safe 修复 | [docs/problems/bugfix/trace-redaction-failsafe.md](docs/problems/bugfix/trace-redaction-failsafe.md) |
 | batch 工具名与 trace 产物报告修复 | [docs/problems/bugfix/batch-tool-contract-and-artifact-reporting.md](docs/problems/bugfix/batch-tool-contract-and-artifact-reporting.md) |
+| task_dir 配置加载修复 | [docs/problems/bugfix/task-dir-config-not-loaded.md](docs/problems/bugfix/task-dir-config-not-loaded.md) |
 | 文档一致性审计 | [docs/audit-checklist.md](docs/audit-checklist.md) |
 | 审计日志 | [docs/audit-log.md](docs/audit-log.md) |
 | 当前任务状态 | [docs/CURRENT.md](docs/CURRENT.md) |
