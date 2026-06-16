@@ -2013,3 +2013,139 @@ def test_fail_safe_returns_structured_error_and_trace(
     trace_id = next(path.parent.name for path in tmp_path.rglob("trace.jsonl"))
     record = trace_module.read_trace(trace_id)[0]
     assert record["error_kind"] == "fail_safe"
+
+
+def test_distribution_critical_tool_descriptions_include_usage_guidance() -> None:
+    by_name = {tool.name: tool for tool in TOOLS}
+
+    assert "multimodal" in by_name["screenshot"].description.lower()
+    assert "text-only" in by_name["screenshot"].description.lower()
+    assert "real" in by_name["click"].description.lower()
+    assert "observe" in by_name["batch"].description.lower()
+    assert "task_id" in by_name["start_task"].description
+    assert "source of truth" in by_name["review_task_session"].description.lower()
+
+
+def test_invalid_tool_error_includes_next_action() -> None:
+    import computer_use.mcp_server as server
+
+    data = json.loads(
+        server._call_tool(
+            "batch",
+            {"actions": [{"tool": "bad_tool", "args": {}}]},
+        )
+    )
+
+    failure = data["results"][0]["result"]
+    error_kind = failure.get("error_kind") or failure.get("error", "")
+    assert "invalid_tool" in error_kind
+    assert "next_action" in failure
+    assert "allowed_tools" in failure["next_action"]
+
+
+def test_ui_not_found_error_includes_next_action(monkeypatch) -> None:
+    import computer_use.composite as composite
+    import computer_use.mcp_server as server
+
+    monkeypatch.setattr(
+        composite,
+        "click_by_text",
+        lambda *args, **kwargs: {"error": "ui_not_found"},
+    )
+
+    data = json.loads(
+        server._call_tool(
+            "click_by_text",
+            {"text": "__this_control_does_not_exist_12345__"},
+        )
+    )
+
+    error_value = data.get("error_kind") or data.get("error", "")
+    assert "ui_not_found" in error_value
+    assert "next_action" in data
+    assert "get_ui_snapshot" in data["next_action"] or "screenshot" in data["next_action"]
+
+
+def test_fail_safe_error_includes_next_action(monkeypatch) -> None:
+    import pyautogui
+
+    import computer_use.mcp_server as server
+    import computer_use.ui_automation as uia_module
+
+    info = uia_module.ControlInfo(
+        name="",
+        control_type="",
+        class_name="",
+        process_name="",
+        is_password=False,
+        rect=None,
+        center=None,
+    )
+
+    def _raise_fail_safe(*args, **kwargs):
+        raise pyautogui.FailSafeException("fail-safe triggered")
+
+    monkeypatch.setattr(server, "inspect_point", lambda x, y: info)
+    monkeypatch.setattr(server, "click", _raise_fail_safe)
+
+    data = json.loads(server._call_tool("click", {"x": 100, "y": 100}))
+
+    error_value = data.get("error_kind") or data.get("error", "")
+    assert "fail_safe" in error_value
+    assert "next_action" in data
+
+
+def test_coordinate_safety_block_error_includes_next_action(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+    import computer_use.ui_automation as uia_module
+    from computer_use import safety
+
+    info = uia_module.ControlInfo(
+        name="",
+        control_type="",
+        class_name="",
+        process_name="",
+        is_password=False,
+        rect=None,
+        center=None,
+    )
+
+    def _raise_safety(*args, **kwargs):
+        raise safety.SafetyError("mocked safety block")
+
+    monkeypatch.setattr(server, "inspect_point", lambda x, y: info)
+    monkeypatch.setattr(server, "check_target_window", _raise_safety)
+
+    data = json.loads(server._call_tool("click", {"x": 100, "y": 100}))
+
+    error_value = data.get("error_kind") or data.get("error", "")
+    assert "safety" in error_value.lower() or "mocked safety block" in error_value
+    assert "next_action" in data
+    assert "get_monitors" in data["next_action"] or "inspect_point" in data["next_action"]
+
+
+def test_coordinate_value_error_includes_next_action(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+    import computer_use.ui_automation as uia_module
+
+    info = uia_module.ControlInfo(
+        name="",
+        control_type="",
+        class_name="",
+        process_name="",
+        is_password=False,
+        rect=None,
+        center=None,
+    )
+
+    def _raise_coordinate_value_error(*args, **kwargs):
+        raise ValueError("coordinates out of monitor bounds")
+
+    monkeypatch.setattr(server, "inspect_point", lambda x, y: info)
+    monkeypatch.setattr(server, "click", _raise_coordinate_value_error)
+
+    data = json.loads(server._call_tool("click", {"x": 100, "y": 100}))
+
+    assert "coordinates" in data["error"].lower() or "bounds" in data["error"].lower()
+    assert "next_action" in data
+    assert "get_monitors" in data["next_action"] or "inspect_point" in data["next_action"]

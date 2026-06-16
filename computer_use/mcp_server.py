@@ -91,6 +91,19 @@ _TASK_MANAGEMENT_TOOLS = frozenset(
     {"start_task", "finish_task", "get_task", "list_tasks", "review_task_session"}
 )
 _TASK_CONTEXT_EXCLUDED_TOOLS = _TASK_MANAGEMENT_TOOLS | {"review_task"}
+_NEXT_ACTION_INVALID_TOOL = (
+    "Use one of allowed_tools; do not include MCP namespace prefixes in nested "
+    "batch/run_task_plan steps."
+)
+_NEXT_ACTION_UI_NOT_FOUND = (
+    "Call get_ui_snapshot or screenshot, then retry with a better target."
+)
+_NEXT_ACTION_FAIL_SAFE = (
+    "Confirm cursor/remote-control state, then re-observe before sending input."
+)
+_NEXT_ACTION_COORDINATE_OR_SAFETY = (
+    "Call get_monitors and inspect_point before retrying."
+)
 
 
 @dataclass(frozen=True)
@@ -133,7 +146,7 @@ def _get_prompt(name: str) -> GetPromptResult:
 TOOLS: list[Tool] = [
     Tool(
         name="screenshot",
-        description="Take a screenshot and save it as a PNG file. The image itself is never returned in the context; only a file path reference is returned. The file can then be read with multimodal tools such as ReadMediaFile. By default the primary monitor (monitor=1) is captured; pass monitor=0 for the entire virtual desktop, or pass save_path to override the save location.",
+        description="Take a screenshot and save it as a PNG file. The image itself is never returned in the context; only a file path reference is returned. Requires a multimodal model or client image reader; text-only models cannot interpret the PNG path. By default the primary monitor (monitor=1) is captured; pass monitor=0 for the entire virtual desktop, or pass save_path to override the save location.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -175,7 +188,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="click",
-        description="Click a UI Automation control by name or at the given non-negative primary-screen physical coordinates (x, y). The cursor moves smoothly over a short duration to avoid closing hover-activated menus. Provide either target_name or both x and y.",
+        description="Click a UI Automation control by name or at the given non-negative primary-screen physical coordinates (x, y). This sends real Windows input; observe and verify first. The cursor moves smoothly over a short duration to avoid closing hover-activated menus. Provide either target_name or both x and y.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -212,7 +225,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="move_to",
-        description="Move the cursor to a UI Automation control by name or to the given non-negative primary-screen physical coordinates (x, y). The cursor moves smoothly over a short duration to avoid closing hover-activated menus. Provide either target_name or both x and y.",
+        description="Move the cursor to a UI Automation control by name or to the given non-negative primary-screen physical coordinates (x, y). This sends real Windows input; observe and verify first. The cursor moves smoothly over a short duration to avoid closing hover-activated menus. Provide either target_name or both x and y.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -238,7 +251,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="scroll",
-        description="Scroll the mouse wheel by amount or direction, optionally at non-negative primary-screen physical coordinates.",
+        description="Scroll the mouse wheel by amount or direction, optionally at non-negative primary-screen physical coordinates. This sends real Windows input; observe and verify first.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -263,7 +276,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="type",
-        description="Type the given text.",
+        description="Type the given text. This sends real Windows input; observe and verify first.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -274,7 +287,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="key_combo",
-        description="Press a key combination, e.g. ['ctrl', 'c'].",
+        description="Press a key combination, e.g. ['ctrl', 'c']. This sends real Windows input; observe and verify first.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -288,7 +301,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="mouse_down",
-        description="Press and hold a mouse button at the given non-negative primary-screen physical coordinates.",
+        description="Press and hold a mouse button at the given non-negative primary-screen physical coordinates. This sends real Windows input; observe and verify first.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -305,7 +318,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="mouse_up",
-        description="Release a mouse button. Optionally move to (x, y) before releasing.",
+        description="Release a mouse button. Optionally move to (x, y) before releasing. This sends real Windows input; observe and verify first.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -321,7 +334,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="drag",
-        description="Drag the mouse from (start_x, start_y) to (end_x, end_y) while holding a mouse button.",
+        description="Drag the mouse from (start_x, start_y) to (end_x, end_y) while holding a mouse button. This sends real Windows input; observe and verify first.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -344,7 +357,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="key_down",
-        description="Hold a keyboard key down (press without releasing). Use key_up to release.",
+        description="Hold a keyboard key down (press without releasing). Use key_up to release. This sends real Windows input; observe and verify first.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -355,7 +368,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="key_up",
-        description="Release a keyboard key previously held with key_down.",
+        description="Release a keyboard key previously held with key_down. This sends real Windows input; observe and verify first.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -366,7 +379,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="press_key",
-        description="Press and release a single keyboard key.",
+        description="Press and release a single keyboard key. This sends real Windows input; observe and verify first.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -593,7 +606,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="start_task",
-        description="Start an explicit business task session and return task_id for subsequent tool calls.",
+        description="Start an explicit business task session and return task_id for subsequent tool calls. Use the returned task_id on subsequent calls for auditability.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -643,7 +656,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="review_task_session",
-        description="Generate a deterministic multi-trace summary for a business task session.",
+        description="Generate a deterministic multi-trace summary for a business task session. Use returned task evidence as the source of truth.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -657,6 +670,7 @@ TOOLS: list[Tool] = [
         description=(
             "Execute a sequence of tools in a single call. This is the preferred way to run multi-step GUI workflows. "
             "Call this tool directly with only the `actions` array; do not wrap it in Python/Bash scripts or import `_call_tool`. "
+            "Use after you observe the UI; do not use for blind clicking. "
             "Each action is an object with `tool` (the tool name) and `args` (its arguments). "
             "Errors are captured per action. The response contains per-step results with timestamps, plus an optional final screenshot reference."
         ),
@@ -777,6 +791,26 @@ def _failure_for_result(result: Any) -> tuple[str, str] | None:
     return None
 
 
+def _with_next_action(result: dict[str, Any], next_action: str) -> dict[str, Any]:
+    if result.get("error") and "next_action" not in result:
+        result["next_action"] = next_action
+    return result
+
+
+def _with_ui_not_found_next_action(result: dict[str, Any]) -> dict[str, Any]:
+    if result.get("error") == "ui_not_found":
+        return _with_next_action(result, _NEXT_ACTION_UI_NOT_FOUND)
+    return result
+
+
+def _is_coordinate_validation_error(exc: ValueError) -> bool:
+    message = str(exc).lower()
+    return any(
+        token in message
+        for token in ("coordinate", "coordinates", "monitor", "screen", "bounds", "point")
+    )
+
+
 def _attach_trace_manifest(data: dict[str, Any], trace_id: str) -> dict[str, Any]:
     """Derive response trace paths and artifacts from the flat trace manifest."""
     target_trace_id = data.get("trace_id") if isinstance(data.get("trace_id"), str) else trace_id
@@ -844,22 +878,35 @@ def _call_tool(
         payload = _dispatch_tool(name, dispatch_args, cs, **dispatch_kwargs)
     except SafetyError as exc:
         logging.warning("safety block: %s", exc)
-        payload = json.dumps({"error": str(exc)})
+        payload = json.dumps(
+            {"error": str(exc), "next_action": _NEXT_ACTION_COORDINATE_OR_SAFETY}
+        )
         error = exc
     except ValueError as exc:
         logging.warning("validation block: %s", exc)
-        payload = json.dumps({"error": str(exc)})
+        result = {"error": str(exc)}
+        if _is_coordinate_validation_error(exc):
+            result["next_action"] = _NEXT_ACTION_COORDINATE_OR_SAFETY
+        payload = json.dumps(result)
         error = exc
     except pyautogui.FailSafeException as exc:
         logging.warning("pyautogui fail-safe: %s", exc)
         payload = json.dumps(
-            {"error": "fail_safe", "detail": "PyAutoGUI fail-safe triggered"}
+            {
+                "error": "fail_safe",
+                "detail": "PyAutoGUI fail-safe triggered",
+                "next_action": _NEXT_ACTION_FAIL_SAFE,
+            }
         )
     except Exception as exc:
         if _is_fail_safe_exception(exc):
             logging.warning("pyautogui fail-safe: %s", exc)
             payload = json.dumps(
-                {"error": "fail_safe", "detail": "PyAutoGUI fail-safe triggered"}
+                {
+                    "error": "fail_safe",
+                    "detail": "PyAutoGUI fail-safe triggered",
+                    "next_action": _NEXT_ACTION_FAIL_SAFE,
+                }
             )
         else:
             logging.error(
@@ -1338,7 +1385,7 @@ def _dispatch_tool(
             duration=args.get("duration", DEFAULT_MOVE_DURATION),
             button=args.get("button", "left"),
         )
-        return json.dumps(result)
+        return json.dumps(_with_ui_not_found_next_action(result))
 
     if name == "open_menu":
         from computer_use import composite
@@ -1348,7 +1395,7 @@ def _dispatch_tool(
             duration=args.get("duration", DEFAULT_MOVE_DURATION),
             button=args.get("button", "left"),
         )
-        return json.dumps(result)
+        return json.dumps(_with_ui_not_found_next_action(result))
 
     if name == "fill_form":
         from computer_use import composite
@@ -1357,7 +1404,7 @@ def _dispatch_tool(
             duration=args.get("duration", DEFAULT_MOVE_DURATION),
             type_interval=args.get("type_interval", 0.01),
         )
-        return json.dumps(result)
+        return json.dumps(_with_ui_not_found_next_action(result))
 
     if name == "scroll_until":
         from computer_use import composite
@@ -1368,7 +1415,7 @@ def _dispatch_tool(
             clicks=args.get("clicks", 3),
             interval=args.get("interval", 0.3),
         )
-        return json.dumps(result)
+        return json.dumps(_with_ui_not_found_next_action(result))
 
     if name == "run_task_plan":
         from computer_use import runner
@@ -1486,6 +1533,7 @@ def _batch_tool(
                         "requested_tool": exc.requested_tool,
                         "candidates": exc.candidates,
                         "allowed_tools": list(BATCH_ACTION_TOOL_NAMES),
+                        "next_action": _NEXT_ACTION_INVALID_TOOL,
                     },
                     "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
                 }
