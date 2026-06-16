@@ -16,8 +16,9 @@ from typing import Any
 import pyautogui
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.types import GetPromptResult, Prompt, PromptMessage, TextContent, Tool
 
+from computer_use import guidance
 from computer_use.config import load_config
 from computer_use.core import (
     DEFAULT_MOVE_DURATION,
@@ -100,6 +101,34 @@ class ExecutionContext:
     top_level: bool
     is_standalone: bool
     screenshot_path: str | None = None
+
+
+PROMPTS: list[Prompt] = [
+    Prompt(
+        name=item["name"],
+        description=item["description"],
+        arguments=[],
+    )
+    for item in guidance.list_prompt_metadata()
+]
+
+
+def _get_prompt(name: str) -> GetPromptResult:
+    try:
+        text = guidance.prompt_text(name)
+    except KeyError as exc:
+        raise ValueError(f"Unknown prompt: {name}") from exc
+    metadata = next(item for item in guidance.list_prompt_metadata() if item["name"] == name)
+    return GetPromptResult(
+        description=metadata["description"],
+        messages=[
+            PromptMessage(
+                role="user",
+                content=TextContent(type="text", text=text),
+            )
+        ],
+    )
+
 
 TOOLS: list[Tool] = [
     Tool(
@@ -1844,6 +1873,18 @@ async def serve() -> None:
     @server.list_tools()
     async def list_tools() -> list[Tool]:
         return TOOLS
+
+    @server.list_prompts()
+    async def list_prompts() -> list[Prompt]:
+        return PROMPTS
+
+    @server.get_prompt()
+    async def get_prompt(
+        name: str,
+        arguments: dict | None = None,
+    ) -> GetPromptResult:
+        del arguments
+        return _get_prompt(name)
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict) -> list[TextContent]:
