@@ -35,6 +35,13 @@ If the MCP client supports prompts, also load `computer_use_guidance`; it is the
 - Use `wait_for_window` and `wait_for_control` before fixed `sleep`. Use `sleep` only for animations or apps that UIA cannot observe.
 - Never infer trace or task state by scanning global directories. Use returned `trace_path`, `artifact_root`, `artifacts`, `task_id`, and review tools.
 
+## Verify Clicks with the Screenshot Cursor Marker
+
+- Every `screenshot` draws a red crosshair and center dot at the **current cursor position** before saving the PNG.
+- After any coordinate-based `click`, `move_to`, `mouse_down`, `mouse_up`, `drag`, or `scroll`, immediately take a fresh `screenshot` and check where the red marker landed.
+- If the marker is not on the intended target, the previous coordinates were wrong; re-measure from the new screenshot or use UIA tools instead of repeating the same click.
+- Do not assume a click succeeded just because the tool returned without error. The red cursor marker is the authoritative evidence of where input actually occurred.
+
 ## Efficient Tool Use
 
 - Use `launch_app` before desktop-icon clicking when the application can be found by shell shortcut.
