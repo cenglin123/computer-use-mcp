@@ -45,6 +45,9 @@ python -m computer_use doctor
 
 `doctor` 输出 JSON，检查平台、依赖、配置目录和模型能力提醒。它会创建/验证日志、截图、trace、task 目录是否可写，但不会发送鼠标或键盘输入。
 
+- `uiautomation` 检查为 `warning` 时表示未安装该可选依赖；缺少它时 `get_ui_snapshot`、`find_control` 等工具不可用，但 `screenshot` 和纯坐标输入仍可工作。
+- `model_capability` 始终为 `warning`，提醒视觉 GUI 任务需要客户端/模型能读取本地 PNG 路径，MCP server 本身不内置视觉模型。
+
 支持 MCP prompts 的客户端应加载 `computer_use_guidance`。不支持 prompts 或 Skill 的客户端，应复制 [docs/agent-usage.md](agent-usage.md) 或 [examples/clients/agent-prompt.md](../examples/clients/agent-prompt.md) 的提示词。
 
 安装后 smoke test 先用只读能力：
@@ -85,7 +88,8 @@ python tools\smoke_mcp_client.py --server .\.venv\Scripts\python.exe --args -m c
 - 本项目无持久化数据库。截图保存到配置的 `screenshot_dir`，MCP 响应只返回本地路径，不返回 base64。
 - 新安装默认配置根目录为 `~/.computer-use/`：日志写入 `logs/`，截图写入 `screenshots/`，trace 写入 `traces/`，业务任务写入 `tasks/`。
 - `screenshot.save_path` 只能指向 `screenshot_dir` 内已存在的父目录，不能写入任意文件系统位置。
-- trace 保存到配置的 `trace_dir`，默认 `~/.computer-use/traces/`。`batch`、`run_task_plan` 和 `review_task` 响应中的 `trace_path`、`artifact_root`、`artifacts` 是审计入口；不要依赖目录名推断产物。
+- 当 `safety.screenshot_sensitive_window_check` 为 `true` 时，`screenshot` 会尝试检测捕获区域内是否存在敏感进程/窗口类，命中后将整张截图替换为空白图并在响应中标记 `redacted: true`。该机制仅作为辅助保护，不能替代用户审慎选择截图范围。
+- 对于 `launch_app` 启动的应用，目标路径必须在 `safety.allowed_commands` 白名单中；否则会被拒绝并提示参考 `config.example.yaml`。敏感进程（如 KeePass、certmgr）即使在白名单中也会被额外拦截。
 - 新 trace 写入 `trace_dir/YYYY/MM/DD/<trace_id>/`。目录分区使用创建时的本地系统日期；JSON 时间字段使用带时区的 ISO 8601。旧 `<trace_dir>/<trace_id>/` 扁平 trace 保持只读兼容，不自动迁移。
 - 业务任务会话保存到配置的 `task_dir`，默认 `~/.computer-use/tasks/`。显式 task 可跨 Agent 回合归属多个 trace；未传 `task_id` 的旧调用会生成 standalone task。
 - `trace_dir/.index/` 和 `task_dir/.index/` 是可重建 locator 索引，用于按自定义 ID 定位分区目录。备份时应同时包含 `traces/` 和 `tasks/`；`.index/` 可通过维护命令重建，但不要只备份索引。

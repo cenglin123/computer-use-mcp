@@ -126,3 +126,47 @@
 - 审计时检查长期 active task，必要时补 `finish_task(..., cancel=true)` 或记录人工裁决。
 - locator 失效时使用 `computer-use audit rebuild-index --dry-run` 先查看影响，再执行重建。
 - 对无主旧 trace，不要自动归入当前任务；只有明确证据时才手工关联或在报告中标记为 legacy/unowned。
+
+## 首次使用 launch_app 被拦截
+
+**现象**：调用 `launch_app("Notepad")` 返回 `No commands are allowed` 或 `... is not in allowed_commands whitelist`，应用没有启动。
+
+**原因**：`launch_app` 依赖 `safety.allowed_commands` 白名单；默认配置中该列表为空，未命中任何条目时所有启动请求都会被拒绝。
+
+**解决**：
+- 复制 `config.example.yaml` 到 `~/.computer-use/config.yaml`，按本机实际路径填写 `allowed_commands`。
+- 白名单支持绝对路径或程序名；敏感进程（如 KeePass、certmgr）即使列入白名单仍会被拦截。
+- 错误消息已区分“白名单为空”和“未命中白名单”，并指向 `config.example.yaml`。
+
+## 混合 DPI 被 fail-fast
+
+**现象**：服务启动或第一次调用输入工具时抛出混合 DPI 错误。
+
+**原因**：`CoordinateSystem` 在初始化时检测各显示器缩放比例，发现不一致时直接拒绝启动，避免截图坐标与输入坐标错位。
+
+**解决**：
+- 统一所有显示器的缩放比例（Windows 设置 → 系统 → 显示 → 缩放与布局）。
+- 如果必须使用不同缩放，暂时只连接主显示器，或在统一缩放的虚拟机/RDP 会话中运行服务。
+- 混合 DPI 多显示器支持已明确排除在当前计划之外，将作为后续独立计划推进。
+
+## UIA 不可用时只能回退视觉坐标
+
+**现象**：`get_ui_snapshot`、`find_control`、`click_by_text` 等工具返回 `uiautomation_not_available` 或 `ui_not_found`。
+
+**原因**：这些工具依赖可选的 `uiautomation` 包；未安装或目标应用未暴露 UIA 控件时无法使用语义定位。
+
+**解决**：
+- 安装 `uiautomation` 并重新运行 `python -m computer_use doctor` 确认检查通过。
+- 对自定义绘制或 UIA 覆盖不足的应用，由上层多模态模型读取 `screenshot` 返回的截图，估算坐标后调用 `click(x, y)` 等原子工具。
+- MCP server 不内置 OCR 或视觉回退引擎，视觉判断由模型完成。
+
+## 集成测试会操作真实桌面
+
+**现象**：运行 `tests/manual/` 下的测试后，桌面上出现 Notepad 窗口或残留进程。
+
+**原因**：`tests/manual/` 中的测试在真实 Windows 桌面环境执行，会启动应用、截取屏幕、移动/点击鼠标。
+
+**解决**：
+- 默认情况下这些测试被 `manual` marker 保护，不会自动运行；CI 或非手动环境使用 `pytest tests/ -m "not manual"`。
+- 手动运行前设置 `COMPUTER_USE_RUN_MANUAL=1`，并确保当前无人操作鼠标键盘、无敏感窗口可见。
+- 测试 fixture 会尝试终止启动的进程，但异常退出时可能需要手动清理。

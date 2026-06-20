@@ -6,6 +6,39 @@
 - 当前工作状态写在 docs/CURRENT.md；CHANGELOG 只记录历史变更。
 -->
 
+## 2026-06-20
+
+### refactor: 提取 MCP tool schemas 到 computer_use/tools/schemas.py
+
+#### 变更内容
+- 将 mcp_server.py 中静态的 TOOLS 列表及 schema 相关常量迁移到独立模块，保持 _call_tool、_dispatch_tool、_handle_tool_call、_batch_tool 及 composite 运行时不变；新增测试防止 schema tool name 与 dispatch handler 漂移。
+
+### feat: 优化 launch_app 白名单首次使用体验
+
+#### 变更内容
+- 在 computer_use/launcher.py 中区分白名单为空、白名单未命中与敏感进程拦截三种错误消息；白名单相关错误指向 config.example.yaml；新增 config.example.yaml 示例。
+
+### test: 新增真实 GUI 集成测试骨架
+
+#### 变更内容
+- 创建 tests/manual/conftest.py 与 tests/manual/test_notepad_smoke.py；manual 测试默认被 marker 跳过，需设置 COMPUTER_USE_RUN_MANUAL=1；pyproject.toml dev 依赖新增 pytest-timeout 与 pywin32。
+
+### docs: 补充 deployment、pitfalls、overview、README
+
+#### 变更内容
+- 说明 doctor 的 UIA 检查、截图 redaction 现状、allowed_commands 配置、混合 DPI fail-fast、UIA 不可用时视觉回退、集成测试副作用与测试分层策略。
+
+### fix: 收敛验收发现的测试与文档整理问题
+
+#### 变更内容
+- 修复 tests/test_mcp_server.py 中 test_key_down_up_and_press 缩进错误导致的未收集问题；修正已归档计划 frontmatter 为 status: completed；清理 docs/pitfalls.md 重复段落；在 pytest.ini 注册 timeout marker。
+
+
+
+
+
+---
+
 ## 2026-06-17
 
 ### feat: 提升 MCP 分发开箱可用性

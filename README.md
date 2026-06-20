@@ -47,6 +47,23 @@ pip install -e ".[dev]"
 5. Run read-only smoke tools first: `get_monitors`, `get_ui_snapshot`, `review_task_session` on an explicit task.
 6. Only then perform real mouse/keyboard tasks.
 
+## Tests
+
+Run the automated test suite (excludes real-GUI manual tests):
+
+```powershell
+.venv\Scripts\python.exe -m pytest tests/ -v -m "not manual"
+```
+
+To run the real-GUI integration tests in `tests/manual/`:
+
+```powershell
+$env:COMPUTER_USE_RUN_MANUAL = "1"
+.venv\Scripts\python.exe -m pytest tests/manual -v
+```
+
+Only run manual tests on an idle Windows desktop with no sensitive windows visible.
+
 ## Register with an MCP Client
 
 Use the Python interpreter from this checkout's virtual environment and run the server module over stdio.
@@ -221,6 +238,10 @@ the legacy `~/.kimi-code/mcp/computer-use/config.yaml` exists, it is still read.
 Use `config.yaml` in this repository as a template to customize logging,
 screenshot, trace, task, display, and safety settings. MCP client config files
 are only for registering the server process with that client.
+
+If `launch_app` returns a whitelist error, copy `config.example.yaml` to
+`~/.computer-use/config.yaml` and add the target application to
+`safety.allowed_commands`. Sensitive processes are blocked even if listed.
 
 ## 文档
 

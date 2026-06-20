@@ -1,0 +1,30 @@
+# Example runtime configuration for the Computer Use MCP Server.
+# Copy this file to ~/.computer-use/config.yaml and adjust the values.
+
+log_dir: ~/.computer-use/logs
+screenshot_dir: ~/.computer-use/screenshots
+trace_dir: ~/.computer-use/traces
+task_dir: ~/.computer-use/tasks
+
+safety:
+  # List of additional process names to treat as sensitive.
+  sensitive_processes: []
+
+  # List of additional window class names to treat as sensitive.
+  sensitive_window_classes: []
+
+  # If true, screenshot tool will attempt to detect sensitive windows and
+  # warn/blank them. This is advisory in MVP; full protection requires user care.
+  screenshot_sensitive_window_check: true
+
+  # List of allowed command names or absolute paths for the launch_app tool.
+  # If unset or empty, all commands are blocked.
+  allowed_commands:
+    # Examples (update these paths to match your system):
+    - C:/Program Files (x86)/HiBit Uninstaller/HiBitUninstaller.exe
+    - notepad.exe
+
+display:
+  # Default monitor for screenshot when no monitor argument is provided.
+  # 1 = primary monitor (default). 0 = entire virtual desktop, 2+ = secondary.
+  default_monitor: 1

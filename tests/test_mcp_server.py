@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from computer_use.mcp_server import TOOLS, _call_tool
+from computer_use.tools import schemas as schemas_module
 
 
 @pytest.fixture(autouse=True)
@@ -61,6 +63,34 @@ def test_tools_listed() -> None:
         "review_task_session",
         "batch",
     }
+
+
+def test_schemas_module_exports_tools_and_constants() -> None:
+    assert hasattr(schemas_module, "TOOLS")
+    assert hasattr(schemas_module, "MAX_SLEEP_DURATION")
+    assert hasattr(schemas_module, "_MANIFEST_TOOL_NAMES")
+    assert hasattr(schemas_module, "_TASK_MANAGEMENT_TOOLS")
+    assert hasattr(schemas_module, "_TASK_CONTEXT_EXCLUDED_TOOLS")
+    assert {tool.name for tool in schemas_module.TOOLS} == {tool.name for tool in TOOLS}
+
+
+def test_tools_have_dispatch_handlers() -> None:
+    """Every TOOLS entry must have a corresponding branch in _dispatch_tool."""
+    import computer_use.mcp_server as server
+    import inspect
+
+    source = inspect.getsource(server._dispatch_tool)
+    handled: set[str] = set(re.findall(r'if name == "([^"]+)":', source))
+
+    # Capture multi-line `if name in { ... }:` blocks as well.
+    for match in re.finditer(r'if name in \{', source):
+        start = match.end()
+        end = source.find("}:", start)
+        block = source[start:end]
+        handled.update(re.findall(r'"([^"]+)"', block))
+
+    registered = {tool.name for tool in TOOLS}
+    assert registered <= handled, f"missing dispatch handlers for {registered - handled}"
 
 
 @pytest.mark.parametrize(
@@ -1261,6 +1291,20 @@ class TestLowLevelInputTools:
         assert "error" in data
         assert calls == []
 
+    def test_key_down_up_and_press(self, monkeypatch) -> None:
+        import computer_use.mcp_server as server
+
+        calls = []
+        monkeypatch.setattr(server.pyautogui, "position", lambda: (100, 100))
+        monkeypatch.setattr(server, "key_down", lambda key: calls.append(("down", key)))
+        monkeypatch.setattr(server, "key_up", lambda key: calls.append(("up", key)))
+        monkeypatch.setattr(server, "press_key", lambda key: calls.append(("press", key)))
+
+        assert json.loads(_call_tool("key_down", {"key": "ctrl"}))["key_down"] is True
+        assert json.loads(_call_tool("key_up", {"key": "ctrl"}))["key_up"] is True
+        assert json.loads(_call_tool("press_key", {"key": "enter"}))["pressed"] is True
+        assert calls == [("down", "ctrl"), ("up", "ctrl"), ("press", "enter")]
+
 
 def test_screenshot_redacts_when_sensitive_top_level_window_intersects(
     monkeypatch,
@@ -1362,19 +1406,6 @@ def test_screenshot_monitor_zero_falls_back_to_offset_center(
     assert bounds_seen == [(-200, 20, 1920, 1080)]
     assert inspected == [(860, 550)]
     assert data["redacted"] is True
-
-    def test_key_down_up_and_press(self, monkeypatch) -> None:
-        import computer_use.mcp_server as server
-
-        calls = []
-        monkeypatch.setattr(server, "key_down", lambda key: calls.append(("down", key)))
-        monkeypatch.setattr(server, "key_up", lambda key: calls.append(("up", key)))
-        monkeypatch.setattr(server, "press_key", lambda key: calls.append(("press", key)))
-
-        assert json.loads(_call_tool("key_down", {"key": "ctrl"}))["key_down"] is True
-        assert json.loads(_call_tool("key_up", {"key": "ctrl"}))["key_up"] is True
-        assert json.loads(_call_tool("press_key", {"key": "enter"}))["pressed"] is True
-        assert calls == [("down", "ctrl"), ("up", "ctrl"), ("press", "enter")]
 
 
 def _make_control_result(name: str = "OK") -> dict:

@@ -177,6 +177,24 @@ class TestLaunchAppMatching:
         assert result["launched"] is False
         assert "error" in result
         assert "allowed_commands" in result["error"]
+        assert "config.example.yaml" in result["error"]
+        item.InvokeVerb.assert_not_called()
+
+    def test_blocked_when_allowed_commands_empty(self) -> None:
+        _allow([])
+
+        item = _make_item("App", "C:/Start/App.lnk")
+        shell = _make_shell({_CSIDL_STARTMENU: [item]})
+        wscript = _make_wscript({"C:/Start/App.lnk": "C:/App/app.exe"})
+
+        with patch.object(launcher, "_get_shell_dispatch", return_value=shell), \
+             patch.object(launcher, "_get_wscript_shell", return_value=wscript):
+            result = launcher.launch_app("App")
+
+        assert result["launched"] is False
+        assert "error" in result
+        assert "No commands are allowed" in result["error"]
+        assert "config.example.yaml" in result["error"]
         item.InvokeVerb.assert_not_called()
 
     def test_blocked_when_sensitive_process(self) -> None:
@@ -192,4 +210,6 @@ class TestLaunchAppMatching:
 
         assert result["launched"] is False
         assert "error" in result
+        assert "sensitive" in result["error"].lower()
+        assert "certmgr.exe" in result["error"]
         item.InvokeVerb.assert_not_called()

@@ -1,0 +1,19 @@
+{
+  "config": {
+    "max_outer_loops": 5,
+    "max_blind_rechecks": 2,
+    "impl_severity_streak_threshold": 3,
+    "preflight_code_block_threshold": 3,
+    "preflight_code_loc_threshold": 40
+  },
+  "extensions": [],
+  "fsm": {
+    "mode": "standard",
+    "severities": {
+      "1": [
+        "architectural",
+        "structural"
+      ]
+    }
+  }
+}

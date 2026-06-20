@@ -10,6 +10,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from computer_use.config import load_config
 from computer_use.safety import (
     SafetyError,
     check_target_window,
@@ -32,7 +33,36 @@ _SHELL_FOLDERS = [
     _CSIDL_COMMON_DESKTOPDIRECTORY,
 ]
 
-_BLOCKED_ERROR = "Target is in sensitive process list or not in allowed_commands whitelist"
+_CONFIG_EXAMPLE_HINT = "See config.example.yaml for setup instructions."
+
+
+def _whitelist_error(target_path: str) -> dict[str, Any]:
+    allowed = load_config().get("safety", {}).get("allowed_commands", [])
+    if not allowed:
+        return {
+            "launched": False,
+            "error": (
+                "No commands are allowed. Add entries to allowed_commands in "
+                f"config.yaml. {_CONFIG_EXAMPLE_HINT}"
+            ),
+        }
+    return {
+        "launched": False,
+        "error": (
+            f"Command '{target_path}' is not in allowed_commands whitelist. "
+            f"{_CONFIG_EXAMPLE_HINT}"
+        ),
+    }
+
+
+def _sensitive_process_error(process_name: str) -> dict[str, Any]:
+    return {
+        "launched": False,
+        "error": (
+            f"Target '{process_name}' is in the sensitive process list and "
+            "cannot be launched."
+        ),
+    }
 
 
 def _get_shell_dispatch() -> Any | None:
@@ -168,15 +198,16 @@ def launch_app(name: str) -> dict[str, Any]:
     item, item_name, target_path = candidates[0]
 
     # Security checks.
-    if not is_allowed_command(target_path):
-        return {"launched": False, "error": _BLOCKED_ERROR}
+    allowed_commands = load_config().get("safety", {}).get("allowed_commands", [])
+    if not allowed_commands or not is_allowed_command(target_path):
+        return _whitelist_error(target_path)
 
     process_name = _process_name_from_path(target_path)
     if process_name:
         try:
             check_target_window(process_name, None, None)
         except SafetyError:
-            return {"launched": False, "error": _BLOCKED_ERROR}
+            return _sensitive_process_error(process_name)
 
     try:
         item.InvokeVerb("Open")

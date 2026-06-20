@@ -115,6 +115,13 @@ MCP 客户端（如 Claude Desktop、Codex、Kimi Code 或其他支持 stdio MCP
 - **选择**：`open_menu`、`fill_form`、`scroll_until` 等复合工具在 server 内部串行执行原子操作，失败时返回 `ui_not_found` 和候选控件，不替模型做视觉判断。
 - **取舍**：自定义绘制控件或 UIA 覆盖不足的场景仍会失败，但错误信息足够上层多模态模型回退到截图 + 坐标点击；server 不引入 OCR 或 LLM。
 
+## 测试分层策略
+
+- **单元测试**：覆盖配置、安全规则、坐标转换、trace/task 状态机等不依赖真实输入设备的逻辑，由 `pytest tests/ -m "not manual"` 自动运行。
+- **Mock 集成测试**：在 `tests/test_mcp_server.py`、`tests/test_launcher.py` 等模块中，对 MCP 工具分发、batch 编排、launcher 路径解析使用 mock 的 UIA/Shell 对象验证接口契约，避免依赖真实桌面。
+- **真实 GUI 集成测试**：`tests/manual/` 下的测试在真实 Windows 桌面运行，会启动 Notepad、截取屏幕、读取 UIA 树。默认被 `manual` marker 跳过，需设置 `COMPUTER_USE_RUN_MANUAL=1` 并在无人操作输入设备时运行。
+- **手动/ exploratory 验证**：`python -m computer_use doctor`、调试 CLI 和 `tools/smoke_mcp_client.py` 用于安装后自检和协议 smoke test，不替代自动化测试。
+
 ## 不在这里记的内容
 
 - 目录结构 → `ls` / `tree`
