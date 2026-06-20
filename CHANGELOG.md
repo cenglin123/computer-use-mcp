@@ -33,6 +33,12 @@
 #### 变更内容
 - 修复 tests/test_mcp_server.py 中 test_key_down_up_and_press 缩进错误导致的未收集问题；修正已归档计划 frontmatter 为 status: completed；清理 docs/pitfalls.md 重复段落；在 pytest.ini 注册 timeout marker。
 
+### docs: 在 guidance、agent-usage、agent-prompt 同步光标标记验证纪律
+
+#### 变更内容
+- 把截图红十字标记用于验证坐标点击落点的使用纪律，从 SKILL.md 同步到 computer_use.guidance、docs/agent-usage.md 和 examples/clients/agent-prompt.md，确保所有 Agent 入口都能读到该规则。
+
+
 
 
 

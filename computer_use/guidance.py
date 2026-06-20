@@ -26,7 +26,7 @@ _STANDARD_LOOP = """Operate with this loop:
 3. Prefer UIA/semantic targeting over raw coordinates.
 4. Use coordinates only after confirming screenshot pixels and monitor bounds.
 5. Use batch for short mechanical sequences.
-6. Verify after each meaningful state change.
+6. Verify after each meaningful state change; when using coordinate-based input, take a fresh screenshot and check the red cursor marker to confirm the click landed where intended.
 7. Use review_task_session(task_id) and finish_task(task_id, summary=...) when done.
 """
 

@@ -23,7 +23,7 @@ Operate with this loop:
 3. Prefer UIA/semantic targeting over raw coordinates.
 4. Use coordinates only after confirming the screenshot and monitor bounds.
 5. Use batch for short mechanical action sequences.
-6. Verify after every meaningful state change.
+6. Verify after every meaningful state change. When you use coordinate-based clicking, take a fresh screenshot and check the red cursor marker to confirm the click landed on the intended target.
 7. Review with review_task_session and finish the task session with trace evidence when done.
 
 Safety rules:
@@ -38,5 +38,6 @@ Safety rules:
 - 优先用 `launch_app`、`wait_for_window`、`wait_for_control` 和 UIA 定位。
 - 对自绘界面或 UIA 不可见控件，再回退到截图视觉定位。
 - 长上下文或多步点击时优先用 `batch`，默认不请求最终截图，除非需要证据。
+- 使用坐标点击后必须立即截图，通过红色光标标记验证落点是否命中目标。
 - 连续多个顶层调用属于同一业务任务时，显式使用 `start_task` 返回的 `task_id`。
 - 汇报时引用 MCP 返回的 trace/task 路径，不扫描 `~/.computer-use/traces/` 猜测当前任务。
