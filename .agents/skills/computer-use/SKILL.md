@@ -16,6 +16,82 @@ If the MCP client supports prompts, also load `computer_use_guidance`; it is the
 - Treat mouse and keyboard tools as real user input. They affect the active Windows desktop.
 - Do not bypass the MCP tools with ad-hoc `pyautogui` scripts or direct calls into private implementation modules.
 
+## Tool Quick Reference
+
+| Category | Tool | Key params | Purpose |
+|----------|------|-----------|---------|
+| **Observe** | `screenshot` | `monitor=1`, `save_path?` | Save PNG, return path + coordinate metadata |
+| | `get_ui_snapshot` | `scope=foreground`, `include_screenshot=false` | UIA tree of controls (avoid `desktop`+`screenshot`) |
+| | `get_monitors` | — | Physical bounds of all displays |
+| | `find_control` | `name`, `scope`, `control_type?` | Locate a UI element, return center coords |
+| | `inspect_point` | `x`, `y` | What control is under this screen coordinate? |
+| **Click (visual)** | `click_on_screenshot` | `screenshot_path`, `image_x`, `image_y` | Map image pixels → screen coords, full safety chain |
+| | `crop_screenshot` | `screenshot_path`, `x`, `y`, `width`, `height` | Zoom into small target, preserves coordinate mapping |
+| **Click (raw)** | `click` | `x`, `y`, `button?`, `double_click?` | Primary-screen physical coordinates only |
+| | `move_to` | `x`, `y` | Move cursor without clicking |
+| | `click_by_uid` | `uid`, `snapshot` | Click a snapshot-identified control |
+| | `click_by_text` | `text` | Find and click by displayed text |
+| **Input** | `type` | `text` | Type text at current cursor |
+| | `key_combo` | `keys=["ctrl","c"]` | Press key combination |
+| | `press_key` | `key` | Single key press |
+| | `scroll` | `amount` or `direction`+`clicks` | Mouse wheel scroll |
+| | `drag` | `start_x`, `start_y`, `end_x`, `end_y` | Drag operation |
+| **Composite** | `open_menu` | `path=["菜单","项"]` | Click through menu items by name |
+| | `fill_form` | `fields=[{name,value}]` | Batch fill input fields |
+| | `scroll_until` | `target_text`, `direction` | Scroll until text appears in UIA |
+| **Batch** | `batch` | `actions=[{tool,args}]`, `stop_on_error?` | Execute multiple tools in one call |
+| | `run_task_plan` | `steps=[{tool,args}]`, `goal?` | Structured multi-step plan with report |
+| **Task** | `start_task` | `goal` | Begin auditable task, returns `task_id` |
+| | `finish_task` | `task_id`, `summary?`, `cancel?` | End task |
+| | `review_task` | `trace_id`, `detail?` | Trace summary (+ step detail if `detail=true`) |
+| | `review_task_session` | `task_id`, `detail?` | Aggregate task review |
+| **Wait** | `wait_for_window` | `name` | Wait for window to appear/disappear |
+| | `wait_for_control` | `name` | Wait for control to exist/enable/vanish |
+| | `sleep` | `duration` (max 60s) | Fixed pause (prefer event-driven waits) |
+| **Launch** | `launch_app` | `name` | Start app by Start Menu / Desktop shortcut |
+
+> All executable tools accept optional `task_id`. After `start_task`, omitting `task_id` while an explicit task is active returns `missing_task_id`.
+
+## Minimal Examples
+
+### Full visual click flow (preferred)
+
+```json
+1. {"tool": "start_task", "args": {"goal": "Open settings panel"}}
+2. {"tool": "screenshot", "args": {"monitor": 1}}
+   → returns saved_path, coordinate_space, capture_left, capture_top, metadata_path
+3. {"tool": "click_on_screenshot", "args": {"screenshot_path": "<saved_path>", "image_x": 213, "image_y": 48}}
+   → maps image pixels to screen coordinates, runs safety chain, clicks
+4. {"tool": "screenshot", "args": {"monitor": 1}}
+   → verify state change via red cursor marker
+5. {"tool": "review_task_session", "args": {"task_id": "<task_id>", "detail": true}}
+6. {"tool": "finish_task", "args": {"task_id": "<task_id>", "summary": "Opened settings"}}
+```
+
+### Small target: crop then click
+
+```json
+1. {"tool": "screenshot", "args": {"monitor": 1}}
+2. {"tool": "crop_screenshot", "args": {"screenshot_path": "<path>", "x": 180, "y": 30, "width": 120, "height": 50}}
+3. {"tool": "click_on_screenshot", "args": {"screenshot_path": "<crop_path>", "image_x": 33, "image_y": 18}}
+```
+
+### Mechanical batch (after target confirmed)
+
+```json
+{
+  "tool": "batch",
+  "args": {
+    "actions": [
+      {"tool": "click", "args": {"target_name": "File"}},
+      {"tool": "sleep", "args": {"duration": 0.5}},
+      {"tool": "click", "args": {"target_name": "Save"}}
+    ],
+    "task_id": "<task_id>"
+  }
+}
+```
+
 ## Standard Loop
 
 1. Establish task context with `start_task(goal=...)` when the user task may span multiple tool calls or needs auditability.

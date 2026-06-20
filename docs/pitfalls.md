@@ -92,7 +92,7 @@
 **解决**：
 - 安装后先运行 `python -m computer_use doctor`，确认能力边界提醒。
 - 支持 MCP prompts 的客户端加载 `computer_use_guidance`。
-- 不支持 prompts/Skill 时，复制 `docs/agent-usage.md` 或 `examples/clients/agent-prompt.md` 到客户端提示词。
+- 不支持 prompts/Skill 时，复制 `docs/agent-usage.md` 或 `.agents/examples/clients/agent-prompt.md` 到客户端提示词。
 - 纯文本模型只使用 `get_ui_snapshot`、`find_control`、task/trace 审计等结构化工具；需要看图定位时切换到多模态模型。
 
 ## Nested 工具名不是 MCP 外部名称

@@ -8,8 +8,8 @@
 | MCP 工具约定 | [docs/api.md](docs/api.md) |
 | 部署与配置 | [docs/deployment.md](docs/deployment.md) |
 | Agent 使用指南 | [docs/agent-usage.md](docs/agent-usage.md) |
-| Computer Use Skill | [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md) |
-| 客户端配置示例 | [examples/clients/agent-prompt.md](examples/clients/agent-prompt.md) |
+| Computer Use Skill | [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md)（源文件；`.agents/skills/computer-use/SKILL.md` 是分发副本，测试保证不漂移）|
+| 客户端配置示例 | [.agents/examples/clients/agent-prompt.md](.agents/examples/clients/agent-prompt.md) |
 | 已知环境陷阱 | [docs/pitfalls.md](docs/pitfalls.md) |
 | 配置与命令白名单修复 | [docs/problems/bugfix/config-command-allowlist.md](docs/problems/bugfix/config-command-allowlist.md) |
 | 受控路径边界修复 | [docs/problems/bugfix/controlled-path-boundaries.md](docs/problems/bugfix/controlled-path-boundaries.md) |
@@ -22,5 +22,5 @@
 | 文档一致性审计 | [docs/audit-checklist.md](docs/audit-checklist.md) |
 | 审计日志 | [docs/audit-log.md](docs/audit-log.md) |
 | 当前任务状态 | [docs/CURRENT.md](docs/CURRENT.md) |
-| 项目记忆索引 | [.agent/memory/MEMORY.md](.agent/memory/MEMORY.md) |
+| 项目记忆索引 | [.agents/memory/MEMORY.md](.agents/memory/MEMORY.md) |
 | 变更记录 | [CHANGELOG.md](CHANGELOG.md) |

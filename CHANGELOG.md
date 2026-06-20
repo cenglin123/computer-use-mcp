@@ -21,6 +21,17 @@
 #### 变更内容
 - screenshot 返回 coordinate_space/capture_left/capture_top/metadata_path 并写入 sidecar JSON。click_on_screenshot 读取 sidecar 将图像像素映射为屏幕坐标，走完整安全链（validate_coordinate/inspect_point/check_target_window）。crop_screenshot 继承源截图偏移量，裁剪后 click_on_screenshot 仍能映射回原屏幕坐标。更新 schemas/guidance/skill/docs 描述截图点击流程。
 
+### refactor: 统一 .agents 目录结构，充实 SKILL，纳入文档治理
+
+#### 变更内容
+- - 合并 .agent/memory/ 和 examples/ 到 .agents/ 下（.agents/memory/、.agents/examples/clients/）
+- - SKILL.md 新增 Tool Quick Reference 表（30+ 工具速查）和 Minimal Examples 节（视觉点击流程、裁剪+点击、batch 示例）
+- - 新增 test_skill_copies_are_identical 测试，防止 skills/ 和 .agents/skills/ 副本漂移
+- - 更新 AGENTS.md 文档维护原则纳入 SKILL 同步规则
+- - 更新 STRUCTURE.md、docs/agent-usage.md、docs/audit-checklist.md、docs/deployment.md、docs/pitfalls.md、scripts/audit.py 中的路径引用
+- - agent_links.py 同步 AGENTS/CLAUDE/GEMINI 三件套
+
+
 
 ---
 

@@ -8,7 +8,7 @@ def test_distribution_guidance_entrypoints_exist() -> None:
         Path("README.md"),
         Path("docs/agent-usage.md"),
         Path("skills/computer-use/SKILL.md"),
-        Path("examples/clients/agent-prompt.md"),
+        Path(".agents/examples/clients/agent-prompt.md"),
     ]
 
     for path in required:
@@ -40,3 +40,17 @@ def test_examples_do_not_hardcode_kimi_as_only_client() -> None:
             before_first_run = readme.split(header, 1)[0]
             break
     assert "Kimi" not in before_first_run
+
+
+def test_skill_copies_are_identical() -> None:
+    """The canonical SKILL.md and its .agents distribution copy must not drift."""
+    import hashlib
+
+    source = Path("skills/computer-use/SKILL.md")
+    dist = Path(".agents/skills/computer-use/SKILL.md")
+    assert source.exists(), source
+    assert dist.exists(), dist
+    assert (
+        hashlib.sha256(source.read_bytes()).hexdigest()
+        == hashlib.sha256(dist.read_bytes()).hexdigest()
+    ), "skills/computer-use/SKILL.md and .agents copy have drifted; run: Copy-Item skills/computer-use/SKILL.md .agents/skills/computer-use/SKILL.md"

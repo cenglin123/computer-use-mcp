@@ -27,7 +27,7 @@
 - 已知环境陷阱：[docs/pitfalls.md](docs/pitfalls.md)
 - 文档一致性审计：[docs/audit-checklist.md](docs/audit-checklist.md)
 - 当前任务状态：[docs/CURRENT.md](docs/CURRENT.md)
-- 项目记忆索引：[.agent/memory/MEMORY.md](.agent/memory/MEMORY.md)
+- 项目记忆索引：[.agents/memory/MEMORY.md](.agents/memory/MEMORY.md)
 - 复杂任务计划：`docs/plans/`（按需要时在 `active/` 下创建计划文件）
 - 变更记录：[CHANGELOG.md](CHANGELOG.md)
 
@@ -36,9 +36,9 @@
 - **用户**：中文交互；偏好先规划再执行，重要任务走 converge 评审；关注工具执行效率与安全性。
 - **项目上下文**：通用 Windows GUI 自动化 MCP；核心为 `pyautogui` + 可选 `uiautomation`；无 OCR；截图只返回路径，`batch.final_screenshot` 默认关闭；默认状态根目录 `~/.computer-use/`。
 - **关键教训**：优先模型视觉、UIA 和 Shell 启动；自绘界面回退视觉定位；等待优先事件工具，必要时 `sleep`；长任务用原生 `batch`；MCP 只做键鼠宏和观察；桌面图标用 `LVM_GETITEMPOSITION`；直接调用客户端暴露的 `computer-use` 工具，不写 Python 包装 `_call_tool`。
-- **详细记忆**：[.agent/memory/MEMORY.md](.agent/memory/MEMORY.md)
+- **详细记忆**：[.agents/memory/MEMORY.md](.agents/memory/MEMORY.md)
 
-> 每次更新 `.agent/memory/` 后，同步维护本节摘要。
+> 每次更新 `.agents/memory/` 后，同步维护本节摘要。
 
 ## 行为规则
 
@@ -47,7 +47,7 @@
 若你的上下文中包含 "continued from a previous conversation"（compact 恢复信号），在继续任何实质性工作前：
 
 1. 读取 `docs/CURRENT.md` — 确认当前任务状态
-2. 读取 `.agent/memory/MEMORY.md` — 恢复项目记忆与用户画像
+2. 读取 `.agents/memory/MEMORY.md` — 恢复项目记忆与用户画像
 3. 上述步骤完成前，**禁止执行写操作、禁止做出有副作用的判断**
 
 > compact 后 Agent 丢失大量上下文，必须先恢复关键状态。
@@ -102,7 +102,7 @@
 
 **核心理念：只记代码里读不出来的东西。** 目录结构、函数签名、参数默认值不写入文档。
 
-1. 设计决策写入 [docs/overview.md](docs/overview.md)；MCP 工具约定更新 [docs/api.md](docs/api.md)；部署或环境约束更新 [docs/deployment.md](docs/deployment.md)；环境陷阱写入 [docs/pitfalls.md](docs/pitfalls.md)。
+1. 设计决策写入 [docs/overview.md](docs/overview.md)；MCP 工具约定更新 [docs/api.md](docs/api.md)；部署或环境约束更新 [docs/deployment.md](docs/deployment.md)；环境陷阱写入 [docs/pitfalls.md](docs/pitfalls.md)；Skill 使用指导更新 [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md) 后同步到 `.agents/skills/computer-use/SKILL.md`（`test_skill_copies_are_identical` 自动检测漂移）。
 2. 先更新对应 `docs/*.md`，再写 [CHANGELOG.md](CHANGELOG.md)。CHANGELOG 只记变更摘要。
 3. 单个文档接近 300 行时按主题拆分，并在 [STRUCTURE.md](STRUCTURE.md) 补索引。
 4. 需要走"复杂任务闭环"的任务，先在 `docs/plans/active/` 落盘计划，实施完成后移到 `docs/plans/completed/`。单会话小任务不必建计划。
@@ -128,4 +128,4 @@
 - [ ] **CHANGELOG**：是否值得记录？如是，用 `python scripts/changelog.py add ...` 插入到当天日期节。
 - [ ] **同步一致性**：本文件若被编辑，运行 `python scripts/agent_links.py check`；不一致时用 `python scripts/agent_links.py repair` 修复。
 - [ ] **跳过条件**：纯格式修改、注释修改、同一会话内已记录的变更，可跳过文档更新（验证不可跳过）。
-- [ ] **记忆自检**：本次对话是否产生值得沉淀的记忆（用户偏好、项目上下文、可复用教训）？如是，更新 `.agent/memory/` 对应文件并同步 AGENTS.md「项目记忆」内联摘要。
+- [ ] **记忆自检**：本次对话是否产生值得沉淀的记忆（用户偏好、项目上下文、可复用教训）？如是，更新 `.agents/memory/` 对应文件并同步 AGENTS.md「项目记忆」内联摘要。

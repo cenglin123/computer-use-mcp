@@ -1,6 +1,6 @@
 # Agent 使用指南
 
-> 分发层指导优先级：MCP prompt `computer_use_guidance` > `skills/computer-use/SKILL.md` > 复制本页或 `examples/clients/agent-prompt.md` 到客户端提示词。
+> 分发层指导优先级：MCP prompt `computer_use_guidance` > `skills/computer-use/SKILL.md` > 复制本页或 `.agents/examples/clients/agent-prompt.md` 到客户端提示词。
 
 ## 能力边界
 

@@ -48,7 +48,7 @@ python -m computer_use doctor
 - `uiautomation` 检查为 `warning` 时表示未安装该可选依赖；缺少它时 `get_ui_snapshot`、`find_control` 等工具不可用，但 `screenshot` 和纯坐标输入仍可工作。
 - `model_capability` 始终为 `warning`，提醒视觉 GUI 任务需要客户端/模型能读取本地 PNG 路径，MCP server 本身不内置视觉模型。
 
-支持 MCP prompts 的客户端应加载 `computer_use_guidance`。不支持 prompts 或 Skill 的客户端，应复制 [docs/agent-usage.md](agent-usage.md) 或 [examples/clients/agent-prompt.md](../examples/clients/agent-prompt.md) 的提示词。
+支持 MCP prompts 的客户端应加载 `computer_use_guidance`。不支持 prompts 或 Skill 的客户端，应复制 [docs/agent-usage.md](agent-usage.md) 或 [.agents/examples/clients/agent-prompt.md](../.agents/examples/clients/agent-prompt.md) 的提示词。
 
 安装后 smoke test 先用只读能力：
 

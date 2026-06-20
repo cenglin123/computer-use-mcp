@@ -15,7 +15,7 @@
 - [ ] 行数警告：AGENTS.md 超过 200 行？如有内容可下沉到 docs/，执行下沉。
 - [ ] 依赖漂移：文档声明的技术栈与实际 manifest 不符？更新文档或确认为误报。
 - [ ] 出生档案：缺失则从 git log / 当前状态重建。
-- [ ] 记忆系统：`.agent/memory/MEMORY.md` 空壳或断链？AGENTS.md 内联记忆段缺失或过时？`python scripts/audit.py memory` 逐项复核。
+- [ ] 记忆系统：`.agents/memory/MEMORY.md` 空壳或断链？AGENTS.md 内联记忆段缺失或过时？`python scripts/audit.py memory` 逐项复核。
 
 ## 2. 关键设计决策仍成立？
 
