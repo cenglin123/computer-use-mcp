@@ -68,7 +68,22 @@ Only run manual tests on an idle Windows desktop with no sensitive windows visib
 
 Use the Python interpreter from this checkout's virtual environment and run the server module over stdio.
 
-Generic MCP client shape:
+### cc-switch (recommended for multi-client management)
+
+If you use [cc-switch](https://github.com/Cong-Cong-Man/ClaudeCodeSwitch) to manage MCP servers across clients:
+
+1. Install this server locally (see [Install](#install)).
+2. Copy `config.example.yaml` to `~/.computer-use/config.yaml` and edit `allowed_commands`.
+3. Open cc-switch and go to the MCP management page.
+4. Click **Add MCP** / **+** and fill in:
+   - **Name**: `computer-use`
+   - **Type**: `stdio`
+   - **Command**: `C:\Project\computer-use-mcp\.venv\Scripts\python.exe`
+   - **Args**: `-m computer_use.mcp_server`
+5. Enable the clients you want (opencode, codex, gemini, etc.).
+6. Reactivate the MCP entry or restart the target client to pick up the latest code after updates.
+
+### Generic MCP client
 
 ```json
 {
@@ -81,7 +96,7 @@ Generic MCP client shape:
 }
 ```
 
-Kimi Code TOML shape:
+### Kimi Code
 
 ```toml
 [mcp.servers.computer-use]
