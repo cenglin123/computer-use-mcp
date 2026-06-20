@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pyautogui
+from PIL import Image as PILImage
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import GetPromptResult, Prompt, PromptMessage, TextContent, Tool
@@ -104,6 +105,12 @@ _NEXT_ACTION_FAIL_SAFE = (
 _NEXT_ACTION_COORDINATE_OR_SAFETY = (
     "Call get_monitors and inspect_point before retrying."
 )
+
+#: Maximum JSON-encoded length a get_ui_snapshot response may inline before it is
+#: replaced by a compact `snapshot_output_too_large` error. ~200K chars ≈ 50K
+#: tokens. Foreground snapshots (5-30KB) stay well below this; desktop-level UIA
+#: trees can exceed 200KB and would otherwise dominate the model context.
+MAX_INLINE_SNAPSHOT_CHARS = 200_000
 
 
 @dataclass(frozen=True)
@@ -219,7 +226,8 @@ def _is_coordinate_validation_error(exc: ValueError) -> bool:
 
 def _attach_trace_manifest(data: dict[str, Any], trace_id: str) -> dict[str, Any]:
     """Derive response trace paths and artifacts from the flat trace manifest."""
-    target_trace_id = data.get("trace_id") if isinstance(data.get("trace_id"), str) else trace_id
+    data_trace_id = data.get("trace_id")
+    target_trace_id = data_trace_id if isinstance(data_trace_id, str) else trace_id
     manifest = trace_module.artifact_manifest(target_trace_id)
     data["trace_id"] = manifest["trace_id"]
     data["trace_path"] = manifest["trace_path"]
@@ -351,7 +359,7 @@ def _call_tool(
             and isinstance(result_data, dict)
             and result_data.get("trace_id") == trace_id
         )
-        if not task_runner_owns_trace:
+        if name not in _TASK_CONTEXT_EXCLUDED_TOOLS and not task_runner_owns_trace:
             try:
                 trace_module.record_step(
                     trace_id=trace_id,
@@ -411,21 +419,6 @@ def _task_error(exc: Exception) -> dict[str, Any]:
     raise exc
 
 
-def _review_task_session_result(task_id: str) -> dict[str, Any]:
-    from computer_use import task_session
-
-    task = task_session.get_task(task_id)
-    return {
-        "task_id": task_id,
-        "status": task["status"],
-        "goal": task.get("goal"),
-        "trace_count": task.get("trace_count", 0),
-        "failed_trace_count": task.get("failed_trace_count", 0),
-        "active_trace_count": task.get("active_trace_count", 0),
-        "traces": task.get("traces", []),
-    }
-
-
 def _dispatch_tool(
     name: str,
     args: dict,
@@ -436,6 +429,17 @@ def _dispatch_tool(
     is_standalone: bool = False,
 ) -> str:
     if name == "get_ui_snapshot":
+        if args.get("scope") == "desktop" and args.get("include_screenshot") is True:
+            return json.dumps(
+                {
+                    "error": "high_cost_snapshot_blocked",
+                    "next_action": (
+                        "Use get_ui_snapshot(scope='foreground', include_screenshot=false). "
+                        "If cross-window context is needed, use get_ui_snapshot(scope='desktop', include_screenshot=false) "
+                        "or find_control with narrow criteria."
+                    ),
+                }
+            )
         from computer_use import snapshot
         scope = args.get("scope", "foreground")
         include_screenshot = args.get("include_screenshot", False)
@@ -444,7 +448,21 @@ def _dispatch_tool(
             include_screenshot,
             trace_id=trace_id,
         )
-        return json.dumps(result)
+        serialized = json.dumps(result)
+        if len(serialized) > MAX_INLINE_SNAPSHOT_CHARS:
+            return json.dumps(
+                {
+                    "error": "snapshot_output_too_large",
+                    "scope": scope,
+                    "control_count": len(result.get("controls", [])) if isinstance(result, dict) else None,
+                    "truncated": True,
+                    "next_action": (
+                        "Use scope='foreground', find_control, click_by_text, or narrower criteria. "
+                        "Do not read full desktop snapshot output."
+                    ),
+                }
+            )
+        return serialized
 
     if name == "screenshot":
         config = load_config()
@@ -523,6 +541,28 @@ def _dispatch_tool(
             logging.warning("screenshot save failed: %s", exc)
             return json.dumps({"error": f"Failed to save screenshot: {exc}"})
 
+        coordinate_space = "virtual_desktop" if monitor == 0 else "monitor"
+        result["coordinate_space"] = coordinate_space
+        result["capture_left"] = capture_left
+        result["capture_top"] = capture_top
+
+        sidecar = {
+            "schema_version": 1,
+            "screenshot_path": str(saved),
+            "monitor": monitor,
+            "coordinate_space": coordinate_space,
+            "capture_left": capture_left,
+            "capture_top": capture_top,
+            "width": width,
+            "height": height,
+            "created_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+        }
+        metadata_path = str(saved) + ".json"
+        Path(metadata_path).write_text(
+            json.dumps(sidecar, ensure_ascii=False), encoding="utf-8"
+        )
+        result["metadata_path"] = metadata_path
+
         return json.dumps(result)
 
     if name == "get_monitors":
@@ -546,6 +586,12 @@ def _dispatch_tool(
 
     if name == "move_to":
         return _dispatch_pointer_tool("move_to", args, move_to, cs)
+
+    if name == "click_on_screenshot":
+        return _handle_click_on_screenshot(args, cs, trace_id)
+
+    if name == "crop_screenshot":
+        return _handle_crop_screenshot(args, cs)
 
     if name == "scroll":
         amount = args.get("amount")
@@ -849,7 +895,18 @@ def _dispatch_tool(
 
     if name == "review_task":
         from computer_use import review
-        result = review.review_task(trace_id=args["trace_id"])
+        result = review.review_task(trace_id=args["trace_id"], detail=args.get("detail", False))
+        return json.dumps(result)
+
+    if name == "review_task_session":
+        from computer_use import review
+        try:
+            result = review.review_task_session(
+                task_id=args["task_id"],
+                detail=args.get("detail", False),
+            )
+        except Exception as exc:
+            result = _task_error(exc)
         return json.dumps(result)
 
     if name in {
@@ -857,7 +914,6 @@ def _dispatch_tool(
         "finish_task",
         "get_task",
         "list_tasks",
-        "review_task_session",
     }:
         from computer_use import task_session
 
@@ -881,7 +937,7 @@ def _dispatch_tool(
                     )
                 }
             else:
-                result = _review_task_session_result(args["task_id"])
+                raise ValueError(f"Unhandled task tool: {name}")
         except Exception as exc:
             result = _task_error(exc)
         return json.dumps(result)
@@ -1189,6 +1245,149 @@ def _run_mouse_tool(
     return json.dumps(response)
 
 
+def _read_screenshot_metadata(screenshot_path: str) -> dict[str, Any] | None:
+    metadata_path = str(screenshot_path) + ".json"
+    meta_file = Path(metadata_path)
+    if not meta_file.exists():
+        return None
+    return json.loads(meta_file.read_text(encoding="utf-8"))
+
+
+def _handle_click_on_screenshot(
+    args: dict[str, Any],
+    cs: CoordinateSystem,
+    trace_id: str | None = None,
+) -> str:
+    screenshot_path = args["screenshot_path"]
+    image_x = args["image_x"]
+    image_y = args["image_y"]
+    button = args.get("button", "left")
+    duration = args.get("duration", DEFAULT_MOVE_DURATION)
+    is_double = args.get("double_click", False)
+
+    meta = _read_screenshot_metadata(screenshot_path)
+    if meta is None:
+        return json.dumps({
+            "error": "screenshot_metadata_not_found",
+            "next_action": "Call the MCP screenshot tool first and use its saved_path.",
+        })
+
+    if not Path(screenshot_path).exists():
+        return json.dumps({
+            "error": "screenshot_file_not_found",
+            "next_action": "Re-run the MCP screenshot tool; the requested screenshot file is missing.",
+        })
+
+    img_w = meta.get("width", 0)
+    img_h = meta.get("height", 0)
+    if not (0 <= image_x < img_w and 0 <= image_y < img_h):
+        return json.dumps({
+            "error": "image_coordinate_out_of_bounds",
+            "width": img_w,
+            "height": img_h,
+        })
+
+    screen_x = meta["capture_left"] + image_x
+    screen_y = meta["capture_top"] + image_y
+
+    validate_duration(duration)
+    size = cs.get_screen_size()
+    validate_coordinate(screen_x, screen_y, size.width, size.height, monitors=cs.monitors)
+    info = inspect_point(screen_x, screen_y)
+    check_target_window(info.process_name, info.class_name, info.control_type)
+
+    if is_double:
+        double_click(screen_x, screen_y, duration, button=button)
+    elif button and button != "left":
+        click(screen_x, screen_y, duration, button=button)
+    else:
+        click(screen_x, screen_y, duration)
+
+    return json.dumps({
+        "clicked": True,
+        "screenshot_path": str(screenshot_path),
+        "image_x": image_x,
+        "image_y": image_y,
+        "screen_x": screen_x,
+        "screen_y": screen_y,
+        "coordinate_space": meta.get("coordinate_space", "monitor"),
+        "monitor": meta.get("monitor"),
+    })
+
+
+def _handle_crop_screenshot(
+    args: dict[str, Any],
+    cs: CoordinateSystem,
+) -> str:
+    screenshot_path = args["screenshot_path"]
+    x = args["x"]
+    y = args["y"]
+    crop_width = args["width"]
+    crop_height = args["height"]
+
+    meta = _read_screenshot_metadata(screenshot_path)
+    if meta is None:
+        return json.dumps({
+            "error": "screenshot_metadata_not_found",
+            "next_action": "Call the MCP screenshot tool first and use its saved_path.",
+        })
+
+    if not Path(screenshot_path).exists():
+        return json.dumps({
+            "error": "screenshot_file_not_found",
+            "next_action": "Re-run the MCP screenshot tool; the requested screenshot file is missing.",
+        })
+
+    src_w = meta.get("width", 0)
+    src_h = meta.get("height", 0)
+    if x < 0 or y < 0 or x + crop_width > src_w or y + crop_height > src_h:
+        return json.dumps({
+            "error": "image_coordinate_out_of_bounds",
+            "width": src_w,
+            "height": src_h,
+        })
+
+    config = load_config()
+    screenshot_dir = Path(config["screenshot_dir"]).resolve()
+    screenshot_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%f")[:-3]
+    crop_path = str(screenshot_dir / f"crop_{timestamp}.png")
+
+    img = PILImage.open(screenshot_path)
+    cropped = img.crop((x, y, x + crop_width, y + crop_height))
+    cropped.save(crop_path)
+
+    crop_capture_left = meta["capture_left"] + x
+    crop_capture_top = meta["capture_top"] + y
+    crop_meta = {
+        "schema_version": 1,
+        "screenshot_path": crop_path,
+        "source_screenshot_path": str(screenshot_path),
+        "monitor": meta.get("monitor"),
+        "coordinate_space": meta.get("coordinate_space", "monitor"),
+        "capture_left": crop_capture_left,
+        "capture_top": crop_capture_top,
+        "width": crop_width,
+        "height": crop_height,
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+    }
+    crop_meta_path = crop_path + ".json"
+    Path(crop_meta_path).write_text(
+        json.dumps(crop_meta, ensure_ascii=False), encoding="utf-8"
+    )
+
+    return json.dumps({
+        "cropped": True,
+        "saved_path": crop_path,
+        "metadata_path": crop_meta_path,
+        "source_screenshot_path": str(screenshot_path),
+        "capture_left": crop_capture_left,
+        "capture_top": crop_capture_top,
+        "width": crop_width,
+        "height": crop_height,
+    })
+
+
 def _current_logical_position() -> tuple[int, int]:
     """Return the current cursor position in physical virtual screen pixels."""
     x, y = pyautogui.position()
@@ -1285,16 +1484,47 @@ def _finish_standalone_context(context: ExecutionContext) -> None:
 def _handle_tool_call(name: str, arguments: dict) -> str:
     """Execute one MCP call without exposing input values in outer errors."""
     safe_arguments = arguments or {}
-    if name in _TASK_MANAGEMENT_TOOLS:
+    if name in _TASK_CONTEXT_EXCLUDED_TOOLS:
         try:
             data = json.loads(_dispatch_tool(name, safe_arguments, None))  # type: ignore[arg-type]
             if isinstance(data, dict) and "timestamp" not in data:
                 data["timestamp"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+            if name in _MANIFEST_TOOL_NAMES and isinstance(data, dict):
+                fallback_trace_id = safe_arguments.get("trace_id")
+                if not isinstance(fallback_trace_id, str):
+                    fallback_trace_id = data.get("trace_id")
+                if not isinstance(fallback_trace_id, str):
+                    fallback_trace_id = ""
+                data = _attach_trace_manifest(data, fallback_trace_id)
             return json.dumps(data)
         except Exception as exc:
             message = trace_module.sanitize_message(safe_arguments, str(exc))
             logging.error("tool error: %s", message)
             return json.dumps({"error": message})
+
+    if not safe_arguments.get("task_id"):
+        from computer_use import task_session
+
+        active_tasks = task_session.list_active_explicit_tasks(limit=5)
+        if len(active_tasks) == 1:
+            return json.dumps(
+                {
+                    "error": "missing_task_id",
+                    "active_task_id": active_tasks[0]["task_id"],
+                    "next_action": (
+                        "Retry the same tool call with task_id set to active_task_id. "
+                        "After start_task, every executable computer-use tool must pass task_id."
+                    ),
+                }
+            )
+        if len(active_tasks) > 1:
+            return json.dumps(
+                {
+                    "error": "missing_task_id_ambiguous",
+                    "active_task_ids": [task["task_id"] for task in active_tasks],
+                    "next_action": "Choose the intended task_id or finish/cancel stale active tasks.",
+                }
+            )
 
     context: ExecutionContext | None = None
     try:

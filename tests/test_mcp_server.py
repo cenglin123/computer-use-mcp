@@ -32,6 +32,8 @@ def test_tools_listed() -> None:
         "get_monitors",
         "get_ui_snapshot",
         "click",
+        "click_on_screenshot",
+        "crop_screenshot",
         "move_to",
         "scroll",
         "type",
@@ -371,6 +373,7 @@ def test_standalone_context_register_conflict_does_not_leave_active_task(
         kind="task_plan",
         tool="run_task_plan",
     )
+    task_session.finish_task(owner)
 
     data = json.loads(
         server._handle_tool_call(
@@ -387,6 +390,77 @@ def test_standalone_context_register_conflict_does_not_leave_active_task(
 
     assert data["error"] == "trace_task_conflict"
     assert all(task["status"] != "active" for task in standalone_tasks)
+
+
+def test_top_level_tool_without_task_id_is_rejected_when_active_explicit_task_exists(
+    tmp_path, monkeypatch
+):
+    import computer_use.mcp_server as server
+    import computer_use.task_session as task_session
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
+    monkeypatch.setattr(server.time, "sleep", lambda duration: None)
+    task_id = task_session.start_task("guarded")["task_id"]
+
+    data = json.loads(server._handle_tool_call("sleep", {"duration": 0}))
+
+    assert data["error"] == "missing_task_id"
+    assert data["active_task_id"] == task_id
+    task = task_session.get_task(task_id)
+    assert task["trace_count"] == 0
+
+
+def test_top_level_tool_without_task_id_still_creates_standalone_when_no_active_task(
+    tmp_path, monkeypatch
+):
+    import computer_use.mcp_server as server
+    import computer_use.task_session as task_session
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
+    monkeypatch.setattr(server.time, "sleep", lambda duration: None)
+
+    data = json.loads(server._handle_tool_call("sleep", {"duration": 0}))
+
+    task = task_session.get_task(data["task_id"])
+    assert task["mode"] == "standalone"
+    assert task["status"] == "succeeded"
+    assert task["trace_count"] == 1
+
+
+def test_top_level_tool_with_task_id_registers_trace_to_explicit_task(
+    tmp_path, monkeypatch
+):
+    import computer_use.mcp_server as server
+    import computer_use.task_session as task_session
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
+    monkeypatch.setattr(server.time, "sleep", lambda duration: None)
+    task_id = task_session.start_task("grouped")["task_id"]
+
+    data = json.loads(
+        server._handle_tool_call("sleep", {"duration": 0, "task_id": task_id})
+    )
+
+    assert data["task_id"] == task_id
+    task = task_session.get_task(task_id)
+    assert task["status"] == "active"
+    assert task["trace_count"] == 1
+
+
+def test_task_management_tools_do_not_require_task_id_guard(
+    tmp_path, monkeypatch
+):
+    import computer_use.mcp_server as server
+    import computer_use.task_session as task_session
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
+    task_session.start_task("owner")
+
+    data = json.loads(server._handle_tool_call("list_tasks", {}))
+
+    assert "error" not in data
+    assert isinstance(data["tasks"], list)
+    assert any(task["mode"] == "explicit" for task in data["tasks"])
 
 
 def test_batch_registers_only_top_level_trace_for_task(tmp_path, monkeypatch):
@@ -1408,6 +1482,311 @@ def test_screenshot_monitor_zero_falls_back_to_offset_center(
     assert data["redacted"] is True
 
 
+def _create_real_png(path, width: int, height: int) -> None:
+    from PIL import Image
+
+    img = Image.new("RGB", (width, height), color=(100, 150, 200))
+    img.save(str(path))
+
+
+def _write_screenshot_sidecar(screenshot_path, **overrides) -> dict:
+    defaults = {
+        "schema_version": 1,
+        "screenshot_path": str(screenshot_path),
+        "monitor": 1,
+        "coordinate_space": "monitor",
+        "capture_left": 0,
+        "capture_top": 0,
+        "width": 1920,
+        "height": 1080,
+        "created_at": "2026-06-21T00:00:00.000+00:00",
+    }
+    defaults.update(overrides)
+    meta_path = str(screenshot_path) + ".json"
+    Path(meta_path).write_text(json.dumps(defaults), encoding="utf-8")
+    return defaults
+
+
+def _safe_control_info():
+    from computer_use.ui_automation import ControlInfo
+
+    return ControlInfo(
+        name="",
+        control_type="",
+        class_name="",
+        process_name="safe.exe",
+        is_password=False,
+        rect=None,
+        center=None,
+    )
+
+
+def _single_monitor_coordinate_system() -> SimpleNamespace:
+    monitors = [{"left": 0, "top": 0, "width": 1920, "height": 1080}]
+    return SimpleNamespace(
+        monitors=monitors,
+        get_screen_size=lambda: SimpleNamespace(width=1920, height=1080),
+    )
+
+
+def _patch_safety_chain(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+    import computer_use.ui_automation as uia_module
+
+    info = _safe_control_info()
+    monkeypatch.setattr(server, "inspect_point", lambda x, y: info)
+    monkeypatch.setattr(uia_module, "inspect_point", lambda x, y: info)
+    monkeypatch.setattr(server, "check_target_window", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        server, "get_coordinate_system", _single_monitor_coordinate_system
+    )
+
+
+def test_screenshot_writes_coordinate_metadata(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        monkeypatch.setattr(server, "load_config", lambda: _minimal_config(tmpdir))
+        monkeypatch.setattr(server, "save_screenshot", _fake_save_screenshot)
+
+        data = json.loads(_call_tool("screenshot", {}))
+
+        assert data["screenshot_taken"] is True
+        assert data["coordinate_space"] == "monitor"
+        assert "capture_left" in data
+        assert "capture_top" in data
+        assert "metadata_path" in data
+
+        meta_path = data["metadata_path"]
+        assert Path(meta_path).exists()
+        meta = json.loads(Path(meta_path).read_text(encoding="utf-8"))
+        assert meta["schema_version"] == 1
+        assert meta["screenshot_path"] == data["saved_path"]
+        assert meta["monitor"] == 1
+        assert meta["coordinate_space"] == "monitor"
+        assert meta["width"] == data["width"]
+        assert meta["height"] == data["height"]
+        assert meta["capture_left"] == data["capture_left"]
+        assert meta["capture_top"] == data["capture_top"]
+
+
+def test_screenshot_monitor_zero_writes_virtual_desktop_metadata(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        monkeypatch.setattr(server, "load_config", lambda: _minimal_config(tmpdir))
+        monkeypatch.setattr(server, "save_screenshot", _fake_save_screenshot)
+
+        data = json.loads(_call_tool("screenshot", {"monitor": 0}))
+
+        assert data["coordinate_space"] == "virtual_desktop"
+
+
+def test_click_on_screenshot_maps_coordinates(monkeypatch, tmp_path) -> None:
+    import computer_use.mcp_server as server
+
+    shot_path = tmp_path / "shot.png"
+    _create_real_png(shot_path, 1920, 1080)
+    _write_screenshot_sidecar(shot_path, capture_left=0, capture_top=0)
+
+    click_calls = []
+    monkeypatch.setattr(
+        server, "click", lambda x, y, duration: click_calls.append((x, y, duration))
+    )
+    _patch_safety_chain(monkeypatch)
+
+    data = json.loads(
+        _call_tool(
+            "click_on_screenshot",
+            {"screenshot_path": str(shot_path), "image_x": 213, "image_y": 48},
+        )
+    )
+
+    assert data["clicked"] is True
+    assert data["image_x"] == 213
+    assert data["image_y"] == 48
+    assert data["screen_x"] == 213
+    assert data["screen_y"] == 48
+    assert data["coordinate_space"] == "monitor"
+    assert data["monitor"] == 1
+    assert click_calls == [(213, 48, 0.2)]
+
+
+def test_click_on_screenshot_missing_metadata(tmp_path) -> None:
+    shot_path = tmp_path / "shot.png"
+    _create_real_png(shot_path, 100, 100)
+
+    data = json.loads(
+        _call_tool(
+            "click_on_screenshot",
+            {"screenshot_path": str(shot_path), "image_x": 50, "image_y": 50},
+        )
+    )
+
+    assert data["error"] == "screenshot_metadata_not_found"
+
+
+def test_click_on_screenshot_out_of_bounds(tmp_path) -> None:
+    shot_path = tmp_path / "shot.png"
+    _create_real_png(shot_path, 100, 100)
+    _write_screenshot_sidecar(shot_path, width=100, height=100)
+
+    data = json.loads(
+        _call_tool(
+            "click_on_screenshot",
+            {"screenshot_path": str(shot_path), "image_x": 200, "image_y": 50},
+        )
+    )
+
+    assert data["error"] == "image_coordinate_out_of_bounds"
+    assert data["width"] == 100
+    assert data["height"] == 100
+
+
+def test_click_on_screenshot_runs_safety_check(monkeypatch, tmp_path) -> None:
+    import computer_use.mcp_server as server
+    import computer_use.ui_automation as uia_module
+
+    shot_path = tmp_path / "shot.png"
+    _create_real_png(shot_path, 1920, 1080)
+    _write_screenshot_sidecar(shot_path, capture_left=0, capture_top=0)
+
+    inspect_calls = []
+    check_calls = []
+    info = _safe_control_info()
+    monkeypatch.setattr(
+        server,
+        "inspect_point",
+        lambda x, y: inspect_calls.append((x, y)) or info,
+    )
+    monkeypatch.setattr(
+        uia_module,
+        "inspect_point",
+        lambda x, y: inspect_calls.append((x, y)) or info,
+    )
+    monkeypatch.setattr(
+        server, "check_target_window", lambda *a, **kw: check_calls.append(a)
+    )
+    monkeypatch.setattr(
+        server, "get_coordinate_system", _single_monitor_coordinate_system
+    )
+    monkeypatch.setattr(server, "click", lambda x, y, duration: None)
+
+    _call_tool(
+        "click_on_screenshot",
+        {"screenshot_path": str(shot_path), "image_x": 100, "image_y": 200},
+    )
+
+    assert (100, 200) in inspect_calls
+    assert len(check_calls) == 1
+
+
+def test_crop_screenshot_inherits_offsets(monkeypatch, tmp_path) -> None:
+    import computer_use.mcp_server as server
+
+    shot_path = tmp_path / "shot.png"
+    _create_real_png(shot_path, 1920, 1080)
+    _write_screenshot_sidecar(
+        shot_path, capture_left=100, capture_top=200, width=1920, height=1080
+    )
+    monkeypatch.setattr(server, "load_config", lambda: _minimal_config(str(tmp_path)))
+
+    data = json.loads(
+        _call_tool(
+            "crop_screenshot",
+            {
+                "screenshot_path": str(shot_path),
+                "x": 50,
+                "y": 60,
+                "width": 360,
+                "height": 120,
+            },
+        )
+    )
+
+    assert data["cropped"] is True
+    assert data["capture_left"] == 150
+    assert data["capture_top"] == 260
+    assert data["width"] == 360
+    assert data["height"] == 120
+
+    crop_meta = json.loads(Path(data["metadata_path"]).read_text(encoding="utf-8"))
+    assert crop_meta["capture_left"] == 150
+    assert crop_meta["capture_top"] == 260
+    assert crop_meta["source_screenshot_path"] == str(shot_path)
+    assert crop_meta["width"] == 360
+    assert crop_meta["height"] == 120
+
+
+def test_crop_screenshot_out_of_bounds(monkeypatch, tmp_path) -> None:
+    import computer_use.mcp_server as server
+
+    shot_path = tmp_path / "shot.png"
+    _create_real_png(shot_path, 200, 200)
+    _write_screenshot_sidecar(shot_path, width=200, height=200)
+    monkeypatch.setattr(server, "load_config", lambda: _minimal_config(str(tmp_path)))
+
+    data = json.loads(
+        _call_tool(
+            "crop_screenshot",
+            {
+                "screenshot_path": str(shot_path),
+                "x": 0,
+                "y": 0,
+                "width": 300,
+                "height": 200,
+            },
+        )
+    )
+
+    assert data["error"] == "image_coordinate_out_of_bounds"
+    assert data["width"] == 200
+    assert data["height"] == 200
+
+
+def test_click_on_screenshot_works_with_crop(monkeypatch, tmp_path) -> None:
+    import computer_use.mcp_server as server
+
+    shot_path = tmp_path / "shot.png"
+    _create_real_png(shot_path, 1920, 1080)
+    _write_screenshot_sidecar(
+        shot_path, capture_left=100, capture_top=200, width=1920, height=1080
+    )
+    monkeypatch.setattr(server, "load_config", lambda: _minimal_config(str(tmp_path)))
+
+    crop_data = json.loads(
+        _call_tool(
+            "crop_screenshot",
+            {
+                "screenshot_path": str(shot_path),
+                "x": 50,
+                "y": 60,
+                "width": 360,
+                "height": 120,
+            },
+        )
+    )
+    crop_path = crop_data["saved_path"]
+
+    click_calls = []
+    monkeypatch.setattr(
+        server, "click", lambda x, y, duration: click_calls.append((x, y, duration))
+    )
+    _patch_safety_chain(monkeypatch)
+
+    data = json.loads(
+        _call_tool(
+            "click_on_screenshot",
+            {"screenshot_path": crop_path, "image_x": 30, "image_y": 40},
+        )
+    )
+
+    assert data["clicked"] is True
+    assert data["screen_x"] == 180
+    assert data["screen_y"] == 300
+    assert click_calls == [(180, 300, 0.2)]
+
+
 def _make_control_result(name: str = "OK") -> dict:
     return {
         "found": True,
@@ -1805,13 +2184,87 @@ def test_get_ui_snapshot_tool_dispatch(monkeypatch, tmp_path):
 
     monkeypatch.setattr(snapshot_mod, "get_ui_snapshot", fake_get_ui_snapshot)
 
-    result = _call_tool("get_ui_snapshot", {"scope": "desktop", "include_screenshot": True})
+    result = _call_tool("get_ui_snapshot", {"scope": "foreground", "include_screenshot": True})
     data = json.loads(result)
     assert data["screenshot_path"] == "C:/tmp/snap.png"
-    assert data["scope"] == "desktop"
+    assert data["scope"] == "foreground"
     assert data["include_screenshot"] is True
-    assert calls[0][0:2] == ("desktop", True)
+    assert calls[0][0:2] == ("foreground", True)
     assert isinstance(calls[0][2], str)
+
+
+def test_get_ui_snapshot_blocks_desktop_with_include_screenshot(monkeypatch, tmp_path):
+    import computer_use.snapshot as snapshot_mod
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("snapshot.get_ui_snapshot must not be called")
+
+    monkeypatch.setattr(snapshot_mod, "get_ui_snapshot", fail_if_called)
+
+    result = _call_tool(
+        "get_ui_snapshot", {"scope": "desktop", "include_screenshot": True}
+    )
+    data = json.loads(result)
+
+    assert data["error"] == "high_cost_snapshot_blocked"
+    assert "next_action" in data
+    assert "screenshot_path" not in data
+    assert "controls" not in data
+
+
+def test_get_ui_snapshot_large_output_returns_compact_error(monkeypatch, tmp_path):
+    import computer_use.mcp_server as server
+    import computer_use.snapshot as snapshot_mod
+
+    # Force the post-serialization budget below the fake payload size so the
+    # compact-error branch fires regardless of the default 200K threshold.
+    monkeypatch.setattr(server, "MAX_INLINE_SNAPSHOT_CHARS", 100)
+    large_blob = "x" * 5000
+    fake_payload = {
+        "scope": "desktop",
+        "controls": [{"uid": "0", "name": large_blob, "control_type": "Button"}],
+    }
+
+    def fake_get_ui_snapshot(scope, include_screenshot, trace_id=None):
+        return fake_payload
+
+    monkeypatch.setattr(snapshot_mod, "get_ui_snapshot", fake_get_ui_snapshot)
+
+    result = _call_tool("get_ui_snapshot", {"scope": "desktop", "include_screenshot": False})
+    data = json.loads(result)
+
+    assert data["error"] == "snapshot_output_too_large"
+    assert data["scope"] == "desktop"
+    assert data["truncated"] is True
+    assert data["control_count"] == 1
+    assert "next_action" in data
+    assert "Do not read full desktop snapshot output" in data["next_action"]
+    # The full payload (with the 5K blob) must not leak through.
+    assert large_blob not in result
+
+
+def test_get_ui_snapshot_normal_output_still_returns_controls(monkeypatch, tmp_path):
+    import computer_use.snapshot as snapshot_mod
+
+    fake_payload = {
+        "scope": "foreground",
+        "controls": [
+            {"uid": "0", "name": "File", "control_type": "MenuItem"},
+            {"uid": "1", "name": "Edit", "control_type": "MenuItem"},
+        ],
+    }
+
+    def fake_get_ui_snapshot(scope, include_screenshot, trace_id=None):
+        return fake_payload
+
+    monkeypatch.setattr(snapshot_mod, "get_ui_snapshot", fake_get_ui_snapshot)
+
+    result = _call_tool("get_ui_snapshot", {"scope": "foreground", "include_screenshot": False})
+    data = json.loads(result)
+
+    assert data["scope"] == "foreground"
+    assert data["controls"] == fake_payload["controls"]
+    assert "error" not in data
 
 
 def test_composite_error_sets_error_kind_in_trace(monkeypatch, tmp_path):
@@ -1954,6 +2407,122 @@ def test_review_task_response_uses_reviewed_trace_manifest(tmp_path, monkeypatch
     }
 
 
+def test_review_task_detail_passthrough(tmp_path, monkeypatch):
+    import computer_use.trace as trace_module
+
+    monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path)
+    trace_module.record_step(
+        trace_id="review-detail-mcp",
+        step_index=1,
+        tool="click",
+        args={"x": 1, "y": 2},
+        result={"clicked": True},
+        duration_ms=10,
+    )
+    before = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("trace.jsonl"))
+
+    data = json.loads(
+        _call_tool(
+            "review_task",
+            {"trace_id": "review-detail-mcp", "detail": True},
+        )
+    )
+    after = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("trace.jsonl"))
+
+    assert "steps" in data
+    assert len(data["steps"]) == 1
+    assert data["steps"][0]["tool"] == "click"
+    assert data["steps"][0]["args"] == {"x": 1, "y": 2}
+    assert after == before
+
+
+def test_handle_review_task_does_not_create_task_context(tmp_path, monkeypatch):
+    import computer_use.mcp_server as server
+    import computer_use.task_session as task_session
+    import computer_use.trace as trace_module
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
+    monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path / "traces")
+    trace_module.record_step(
+        trace_id="review-readonly",
+        step_index=1,
+        tool="sleep",
+        args={"duration": 0},
+    )
+    before = sorted(
+        path.relative_to(tmp_path / "traces")
+        for path in (tmp_path / "traces").rglob("trace.jsonl")
+    )
+
+    data = json.loads(
+        server._handle_tool_call(
+            "review_task",
+            {"trace_id": "review-readonly", "detail": True},
+        )
+    )
+    after = sorted(
+        path.relative_to(tmp_path / "traces")
+        for path in (tmp_path / "traces").rglob("trace.jsonl")
+    )
+
+    assert data["trace_id"] == "review-readonly"
+    assert "steps" in data
+    assert after == before
+    assert not (tmp_path / "tasks").exists()
+
+
+def test_review_task_session_dispatch_delegates_to_review_module(
+    tmp_path, monkeypatch
+):
+    import computer_use.task_session as task_session
+    import computer_use.trace as trace_module
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
+    monkeypatch.setattr(trace_module, "trace_dir", lambda: tmp_path / "traces")
+
+    task_id = task_session.start_task("mcp session review")["task_id"]
+    trace_module.record_step("mcp-session-trace", 1, "sleep", {"duration": 0})
+    task_session.register_trace(
+        task_id, "mcp-session-trace", kind="atomic", tool="sleep"
+    )
+    task_session.complete_trace(task_id, "mcp-session-trace", status="succeeded")
+
+    data = json.loads(
+        _call_tool(
+            "review_task_session",
+            {"task_id": task_id, "detail": True},
+        )
+    )
+
+    assert data["task_id"] == task_id
+    assert "total_steps" in data
+    assert data["total_steps"] == 1
+    assert "error_distribution" in data
+    assert data["traces"][0]["trace_id"] == "mcp-session-trace"
+    assert "review" in data["traces"][0]
+    assert "steps" in data["traces"][0]["review"]
+    assert len(data["traces"][0]["review"]["steps"]) == 1
+
+
+def test_review_task_session_dispatch_returns_task_not_found(tmp_path, monkeypatch):
+    import computer_use.task_session as task_session
+
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
+
+    data = json.loads(
+        _call_tool("review_task_session", {"task_id": "missing"})
+    )
+
+    assert data["error"] == "task_not_found"
+    assert data["task_id"] == "missing"
+
+
+def test_review_task_session_parallel_helper_is_removed():
+    import computer_use.mcp_server as server
+
+    assert not hasattr(server, "_review_task_session_result")
+
+
 def test_tool_logging_redacts_nested_input_values(
     monkeypatch, caplog
 ) -> None:
@@ -2000,10 +2569,12 @@ def test_exception_logging_redacts_input_values(
 
 
 def test_outer_tool_handler_redacts_exception_response_and_log(
-    monkeypatch, caplog
+    monkeypatch, caplog, tmp_path
 ) -> None:
     import computer_use.mcp_server as server
+    import computer_use.task_session as task_session
 
+    monkeypatch.setattr(task_session, "task_dir", lambda: tmp_path / "tasks")
     monkeypatch.setattr(
         server,
         "_call_tool",

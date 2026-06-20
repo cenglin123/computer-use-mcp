@@ -1,0 +1,14 @@
+{
+  "config": {
+    "max_blind_rechecks": 1
+  },
+  "extensions": [],
+  "fsm": {
+    "mode": "standard",
+    "severities": {
+      "1": [
+        "implementation"
+      ]
+    }
+  }
+}

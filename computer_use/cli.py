@@ -89,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Computer Use local debug CLI")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_screenshot = sub.add_parser("screenshot", help="Output base64 PNG screenshot to stdout")
+    p_screenshot = sub.add_parser("screenshot", help="Output base64 PNG to stdout. WARNING: for debugging only; agents should use the MCP screenshot tool which returns a file path, not base64.")
     p_screenshot.add_argument(
         "--monitor",
         type=int,

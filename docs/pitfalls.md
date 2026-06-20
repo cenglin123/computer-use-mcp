@@ -25,6 +25,19 @@
 - 所有工具接口统一使用 mss 物理像素坐标。
 - 多显示器混合 DPI 会被 `CoordinateSystem` 拒绝，统一缩放比例。
 
+## 截图坐标与屏幕坐标的绑定
+
+**现象**：Agent 从聊天客户端展示的截图预览中估算坐标，传给 `click(x, y)` 后点到了错误位置；多屏环境下偏移更明显。
+
+**原因**：聊天客户端会缩放截图预览以适应对话窗口，预览中的像素坐标与实际屏幕坐标不一致。此外，`monitor=0` 的虚拟桌面截图覆盖多个显示器，其坐标空间与主屏输入坐标空间不同。
+
+**解决**：
+- **优先使用 `click_on_screenshot(screenshot_path, image_x, image_y)`**，而非从缩放预览估算裸 `click(x, y)` 坐标。该工具读取截图的 sidecar metadata 将图像像素准确映射为屏幕坐标，再走完整安全链。
+- `screenshot` 返回 `coordinate_space`（`monitor` 或 `virtual_desktop`）、`capture_left`、`capture_top`，并在 PNG 旁写入 `<saved_path>.json` sidecar。
+- 小目标先用 `crop_screenshot` 裁剪放大，裁剪图继承源截图的坐标偏移，`click_on_screenshot` 对裁剪图仍能映射回原始屏幕坐标。
+- 映射后的屏幕坐标仍受主屏输入安全策略限制；即使源截图来自 `monitor=0`，映射后落入副屏的点击会被 `SafetyError` 拒绝。
+- 映射规则：`screen_x = metadata.capture_left + image_x`，`screen_y = metadata.capture_top + image_y`。
+
 ## 副屏可见但不能输入
 
 **现象**：`screenshot(monitor=0/2)`、`get_monitors` 或 UI 快照能看到副屏，但点击、拖拽、滚动或键盘输入返回坐标安全错误。
@@ -170,3 +183,34 @@
 - 默认情况下这些测试被 `manual` marker 保护，不会自动运行；CI 或非手动环境使用 `pytest tests/ -m "not manual"`。
 - 手动运行前设置 `COMPUTER_USE_RUN_MANUAL=1`，并确保当前无人操作鼠标键盘、无敏感窗口可见。
 - 测试 fixture 会尝试终止启动的进程，但异常退出时可能需要手动清理。
+
+## 长上下文 GUI 任务响应退化
+
+**现象**：随着截图、UIA 快照和工具输出在上下文中累积，对上下文规模敏感的模型出现明显的响应延迟退化（从数秒退化到数分钟）。
+
+**原因**：上下文膨胀主要来自三类来源：
+1. **桌面级 UIA JSON**：`get_ui_snapshot(scope="desktop")` 可产生数百 KB 的结构化输出。
+2. **CLI base64 截图输出**：通过 CLI `python -m computer_use screenshot` 获取截图时，base64 PNG 直接写入 stdout 并进入上下文。
+3. **连续读取多张 PNG**：每张截图作为多模态内容挂入上下文，累积放大规模。
+
+**解决**：
+- 使用 MCP `screenshot` 工具（只返回文件路径，不返回 base64）。
+- UIA 快照默认使用 `scope="foreground"`；仅在需要跨窗口定位时才用 `scope="desktop"`。
+- 不要在上下文中累积历史截图；按需读取最新一张即可。
+- 当单次工具响应耗时超过 60 秒，或连续工具输出累积规模明显放大时，停止视觉迭代，汇总当前状态后新开会话或让用户确认继续。
+
+## 桌面级快照组合被拦截
+
+**现象**：`get_ui_snapshot(scope="desktop", include_screenshot=true)` 返回 `high_cost_snapshot_blocked` 错误。
+
+**原因**：该组合曾产生约 9.5MB 截断输出。MCP 分发层现在直接拦截。
+
+**解决**：使用 `scope="foreground"`，或 `scope="desktop"` 不带 `include_screenshot`。如需跨窗口定位，用 `find_control`。仅取 `scope="desktop"` 但 JSON 仍超过内联预算（200K chars）时还会返回 `snapshot_output_too_large`，此时同样应改用更窄的查询。
+
+## 缺失 task_id 被拒绝
+
+**现象**：在 `start_task` 之后调用可执行工具（如 `screenshot`、`click`、`get_ui_snapshot`），返回 `missing_task_id` 或 `missing_task_id_ambiguous`，工具没有执行。
+
+**原因**：存在未结束的显式业务任务时，MCP 分发层强制要求每次顶层调用显式传 `task_id`，防止归属丢失。task 管理工具和只读的 `review_task` 不受此约束。
+
+**解决**：把响应中的 `active_task_id` 加到重试调用的 `task_id` 参数；若有多个 active task，先用 `finish_task(..., cancel=true)` 或选定其中之一再继续。

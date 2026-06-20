@@ -292,3 +292,11 @@ def list_tasks(
     if limit is not None:
         tasks = tasks[:limit]
     return tasks
+
+
+def list_active_explicit_tasks(limit: int = 10) -> list[dict[str, Any]]:
+    return [
+        task
+        for task in list_tasks(status="active", limit=limit)
+        if task.get("mode") == "explicit"
+    ]

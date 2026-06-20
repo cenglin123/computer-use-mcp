@@ -1,0 +1,15 @@
+{
+  "config": {},
+  "extensions": [],
+  "fsm": {
+    "mode": "standard",
+    "severities": {
+      "1": [
+        "implementation"
+      ],
+      "3": [
+        "structural"
+      ]
+    }
+  }
+}

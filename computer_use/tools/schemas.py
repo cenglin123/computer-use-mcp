@@ -19,7 +19,7 @@ _TASK_CONTEXT_EXCLUDED_TOOLS = _TASK_MANAGEMENT_TOOLS | {"review_task"}
 TOOLS: list[Tool] = [
     Tool(
         name="screenshot",
-        description="Take a screenshot and save it as a PNG file. The image itself is never returned in the context; only a file path reference is returned. Requires a multimodal model or client image reader; text-only models cannot interpret the PNG path. By default the primary monitor (monitor=1) is captured; pass monitor=0 for the entire virtual desktop, or pass save_path to override the save location.",
+        description="Take a screenshot and save it as a PNG file. The image itself is never returned in the context; only a file path reference is returned. Requires a multimodal model or client image reader; text-only models cannot interpret the PNG path. By default the primary monitor (monitor=1) is captured; pass monitor=0 for the entire virtual desktop, or pass save_path to override the save location. Use the returned saved_path and coordinate metadata for any screenshot-based click. Do not infer click coordinates from a scaled chat preview.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -41,7 +41,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="get_ui_snapshot",
-        description="Return a structured UI automation tree snapshot.",
+        description="Return a structured UI automation tree snapshot. Do not use scope=desktop with include_screenshot=true; this combination is blocked because it can create huge outputs.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -61,7 +61,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="click",
-        description="Click a UI Automation control by name or at the given non-negative primary-screen physical coordinates (x, y). This sends real Windows input; observe and verify first. The cursor moves smoothly over a short duration to avoid closing hover-activated menus. Provide either target_name or both x and y.",
+        description="Click a UI Automation control by name or at the given non-negative primary-screen physical coordinates (x, y). This sends real Windows input; observe and verify first. The cursor moves smoothly over a short duration to avoid closing hover-activated menus. Provide either target_name or both x and y. For visual targets from a screenshot, prefer click_on_screenshot(screenshot_path, image_x, image_y). Raw x/y input is for already-known primary-screen physical coordinates.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -98,7 +98,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="move_to",
-        description="Move the cursor to a UI Automation control by name or to the given non-negative primary-screen physical coordinates (x, y). This sends real Windows input; observe and verify first. The cursor moves smoothly over a short duration to avoid closing hover-activated menus. Provide either target_name or both x and y.",
+        description="Move the cursor to a UI Automation control by name or to the given non-negative primary-screen physical coordinates (x, y). This sends real Windows input; observe and verify first. The cursor moves smoothly over a short duration to avoid closing hover-activated menus. Provide either target_name or both x and y. For visual targets from a screenshot, prefer click_on_screenshot(screenshot_path, image_x, image_y). Raw x/y input is for already-known primary-screen physical coordinates.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -120,6 +120,37 @@ TOOLS: list[Tool] = [
                     "description": f"Seconds to spend moving the cursor. Default {DEFAULT_MOVE_DURATION}. Increase if menus close prematurely.",
                 },
             },
+        },
+    ),
+    Tool(
+        name="click_on_screenshot",
+        description="Click at image pixel coordinates on a previously saved screenshot. The tool reads the screenshot's capture metadata (sidecar .json) to map image pixels to screen coordinates, then runs the full safety chain. Prefer this over raw click(x,y) for visual targets.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "screenshot_path": {"type": "string", "description": "Path to a PNG saved by the MCP screenshot tool."},
+                "image_x": {"type": "integer", "description": "X coordinate in image pixels (from left)."},
+                "image_y": {"type": "integer", "description": "Y coordinate in image pixels (from top)."},
+                "button": {"type": "string", "enum": list(VALID_MOUSE_BUTTONS), "default": "left"},
+                "duration": {"type": "number", "default": DEFAULT_MOVE_DURATION, "minimum": 0},
+                "double_click": {"type": "boolean", "default": False},
+            },
+            "required": ["screenshot_path", "image_x", "image_y"],
+        },
+    ),
+    Tool(
+        name="crop_screenshot",
+        description="Crop a region from a saved screenshot, preserving coordinate metadata for click_on_screenshot. Use to zoom in on small targets.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "screenshot_path": {"type": "string"},
+                "x": {"type": "integer", "description": "Left edge in image pixels."},
+                "y": {"type": "integer", "description": "Top edge in image pixels."},
+                "width": {"type": "integer"},
+                "height": {"type": "integer"},
+            },
+            "required": ["screenshot_path", "x", "y", "width", "height"],
         },
     ),
     Tool(
@@ -473,13 +504,18 @@ TOOLS: list[Tool] = [
             "type": "object",
             "properties": {
                 "trace_id": {"type": "string"},
+                "detail": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "When true, include a 'steps' array with per-step args, result, duration_ms, screenshot_path, etc.",
+                },
             },
             "required": ["trace_id"],
         },
     ),
     Tool(
         name="start_task",
-        description="Start an explicit business task session and return task_id for subsequent tool calls. Use the returned task_id on subsequent calls for auditability.",
+        description="Start an explicit business task session and return task_id for subsequent tool calls. Use the returned task_id on subsequent calls for auditability. After start_task, pass the returned task_id to every subsequent executable tool. If an explicit task is active, executable tools without task_id are rejected.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -534,6 +570,11 @@ TOOLS: list[Tool] = [
             "type": "object",
             "properties": {
                 "task_id": {"type": "string"},
+                "detail": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "When true, each trace's review includes a 'steps' array with per-step detail.",
+                },
             },
             "required": ["task_id"],
         },

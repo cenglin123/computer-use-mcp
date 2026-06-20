@@ -268,3 +268,30 @@ def test_record_step_recursively_redacts_input_values(
     assert record["args"]["steps"][1]["args"]["actions"][0]["args"][
         "fields"
     ][0]["name"] == "Password"
+
+
+def test_record_step_preserves_safe_redaction_placeholder_only(
+    tmp_trace_dir: Path,
+) -> None:
+    trace.record_step(
+        trace_id="redaction-placeholder",
+        step_index=1,
+        tool="type",
+        args={
+            "text": {
+                "redacted": True,
+                "length": 10,
+                "preview": "top-secret",
+            }
+        },
+        result={"echo": "top-secret"},
+    )
+
+    record = trace.read_trace("redaction-placeholder")[0]
+    serialized = str(record)
+
+    assert "top-secret" not in serialized
+    assert "preview" not in record["args"]["text"]
+    assert record["args"]["text"] == {"redacted": True, "length": 10}
+    assert record["result"] == {"echo": "<redacted>"}
+    assert record["replayable"] is False

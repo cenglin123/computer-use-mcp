@@ -6,6 +6,24 @@
 - 当前工作状态写在 docs/CURRENT.md；CHANGELOG 只记录历史变更。
 -->
 
+## 2026-06-21
+
+### feat: 强制 task_id 守卫、拦截高成本快照与内联输出预算
+
+#### 变更内容
+- Task 1-4 硬化：start_task 之后缺失 task_id 的可执行工具返回 missing_task_id；get_ui_snapshot(scope=desktop, include_screenshot=true) 直接被拦截返回 high_cost_snapshot_blocked；新增 MAX_INLINE_SNAPSHOT_CHARS=200_000 序列化后预算，超额返回 snapshot_output_too_large；guidance、SKILL.md 和 schema 描述同步加强 task_id / 桌面快照 / PNG 重读 三条规则。
+
+#### 迁移影响
+- 无破坏性迁移：旧调用方未传 task_id 且无 active task 时仍创建 standalone task；schema 描述增强不影响字段。
+
+### feat: 新增 click_on_screenshot/crop_screenshot 与截图坐标绑定 metadata
+
+#### 变更内容
+- screenshot 返回 coordinate_space/capture_left/capture_top/metadata_path 并写入 sidecar JSON。click_on_screenshot 读取 sidecar 将图像像素映射为屏幕坐标，走完整安全链（validate_coordinate/inspect_point/check_target_window）。crop_screenshot 继承源截图偏移量，裁剪后 click_on_screenshot 仍能映射回原屏幕坐标。更新 schemas/guidance/skill/docs 描述截图点击流程。
+
+
+---
+
 ## 2026-06-20
 
 ### refactor: 提取 MCP tool schemas 到 computer_use/tools/schemas.py
@@ -38,6 +56,28 @@
 #### 变更内容
 - 把截图红十字标记用于验证坐标点击落点的使用纪律，从 SKILL.md 同步到 computer_use.guidance、docs/agent-usage.md 和 examples/clients/agent-prompt.md，确保所有 Agent 入口都能读到该规则。
 
+### docs: MCP 调用准确度与性能改进计划
+
+#### 变更内容
+- 记录 2026-06-20 原神任务中点击偏差、截图占上下文、未读取 SKILL、trace 缺少上下文等问题，改进方案已归档至 docs/plans/completed/mcp-accuracy-performance-improvement.md。
+
+### feat: 实现 review_task detail 参数与 MCP 分发统一
+
+#### 变更内容
+- review_task/review_task_session 新增 detail: bool=False 参数，detail=True 时返回 steps 数组（step_index/tool/args/result/duration_ms/screenshot_path 等）。
+- 删除 _review_task_session_result 平行实现，MCP 分发统一委托 review.review_task_session。
+- tools/schemas.py 为 review_task/review_task_session 增加 detail 参数 schema。
+- review_task 顶层调用保持只读，不创建额外 task/trace；detail 输出对历史/raw trace 再做防御性脱敏。
+- 新增/更新测试覆盖 detail 行为、MCP 等价性、只读复盘和脱敏。
+
+### docs: 坐标点击门控、上下文预算与执行示例
+
+#### 变更内容
+- guidance.py/SKILL.md: 坐标点击三段式（move_to -> screenshot -> click）pre-click 验证 + 失败止损规则。
+- guidance.py/SKILL.md: 上下文预算门控（禁用 CLI base64、默认 foreground、60s 响应止损）。
+- cli.py: screenshot help 标注 base64 风险。
+- docs/api.md: clicked=true 语义说明、自绘 GUI 点击安全示例、batch 观察验证警告、scope=desktop 成本提示。
+- docs/pitfalls.md: 长上下文 GUI 任务响应退化陷阱。
 
 
 

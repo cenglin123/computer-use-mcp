@@ -49,3 +49,55 @@ def test_get_prompt_result_contains_text_message() -> None:
     assert len(result.messages) == 1
     assert result.messages[0].role == "user"
     assert "Computer Use MCP" in result.messages[0].content.text
+
+
+def test_guidance_contains_task_id_rejection_rule() -> None:
+    from computer_use import guidance
+
+    text = guidance.prompt_text("computer_use_guidance")
+
+    assert "task_id" in text
+    assert "rejected" in text or "missing_task_id" in text
+
+
+def test_guidance_contains_blocked_desktop_snapshot_rule() -> None:
+    from computer_use import guidance
+
+    text = guidance.prompt_text("computer_use_guidance")
+
+    assert "desktop" in text
+    assert "include_screenshot" in text
+    assert "blocked" in text
+
+
+def test_guidance_contains_png_and_long_response_rule() -> None:
+    from computer_use import guidance
+
+    text = guidance.prompt_text("computer_use_guidance")
+
+    assert "60s" in text or "60 seconds" in text
+    assert "PNG" in text or "png" in text.lower()
+
+
+def test_visual_task_prompt_contains_blocked_snapshot_and_task_id_rules() -> None:
+    from computer_use import guidance
+
+    text = guidance.prompt_text("computer_use_visual_task")
+
+    assert "blocked" in text
+    assert "task_id" in text
+    assert "rejected" in text or "missing_task_id" in text
+
+
+def test_get_ui_snapshot_schema_description_contains_blocked_phrase() -> None:
+    from computer_use.tools.schemas import TOOLS
+
+    tool = next(t for t in TOOLS if t.name == "get_ui_snapshot")
+    assert "blocked" in tool.description.lower()
+
+
+def test_start_task_schema_description_contains_rejected_phrase() -> None:
+    from computer_use.tools.schemas import TOOLS
+
+    tool = next(t for t in TOOLS if t.name == "start_task")
+    assert "rejected" in tool.description or "must" in tool.description.lower()

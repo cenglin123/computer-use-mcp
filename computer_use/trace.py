@@ -233,6 +233,25 @@ def _redacted_value(value: Any) -> dict[str, Any]:
     return redacted
 
 
+def _redacted_placeholder(value: dict[str, Any]) -> dict[str, Any]:
+    placeholder: dict[str, Any] = {"redacted": True}
+    length = value.get("length")
+    if isinstance(length, int):
+        placeholder["length"] = length
+    return placeholder
+
+
+def _collect_secret_strings(value: Any, secrets: list[str]) -> None:
+    if isinstance(value, str) and value:
+        secrets.append(value)
+    elif isinstance(value, dict):
+        for child in value.values():
+            _collect_secret_strings(child, secrets)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            _collect_secret_strings(child, secrets)
+
+
 def _sanitize_arguments(value: Any) -> tuple[Any, list[str], bool]:
     secrets: list[str] = []
     redacted = False
@@ -243,8 +262,11 @@ def _sanitize_arguments(value: Any) -> tuple[Any, list[str], bool]:
             cleaned: dict[str, Any] = {}
             for key, child in item.items():
                 if str(key).lower() in _SENSITIVE_INPUT_KEYS:
-                    if isinstance(child, str) and child:
-                        secrets.append(child)
+                    _collect_secret_strings(child, secrets)
+                    if isinstance(child, dict) and child.get("redacted") is True:
+                        cleaned[key] = _redacted_placeholder(child)
+                        redacted = True
+                        continue
                     cleaned[key] = _redacted_value(child)
                     redacted = True
                 else:
@@ -289,17 +311,49 @@ def sanitize_message(args: dict[str, Any], message: str) -> str:
     return _redact_secret_strings(message, secrets)
 
 
+def _sanitize_record_payload(
+    args: Any,
+    result: Any,
+    error_message: Any,
+) -> tuple[Any, Any, Any, bool]:
+    cleaned_args, arg_secrets, args_redacted = _sanitize_arguments(args)
+    cleaned_result, result_secrets, _ = _sanitize_arguments(result)
+    secrets = arg_secrets + result_secrets
+    return (
+        cleaned_args,
+        _redact_secret_strings(cleaned_result, secrets),
+        _redact_secret_strings(error_message, secrets),
+        args_redacted,
+    )
+
+
+def sanitize_trace_payload(
+    args: Any,
+    result: Any = None,
+    error_message: Any = None,
+) -> tuple[Any, Any, Any]:
+    """Defensively redact trace args/result fields for review output."""
+    cleaned_args, cleaned_result, cleaned_error_message, _ = _sanitize_record_payload(
+        args,
+        result,
+        error_message,
+    )
+    return cleaned_args, cleaned_result, cleaned_error_message
+
+
 def write_record(record: TraceRecord) -> Path:
     """Append a trace record to ``<trace_id>/trace.jsonl``."""
     root = trace_root(record.trace_id)
     trace_file = root / "trace.jsonl"
     data = {k: _serialize(v) for k, v in asdict(record).items()}
-    cleaned_args, secrets, redacted = _sanitize_arguments(data["args"])
-    data["args"] = cleaned_args
-    data["result"] = _redact_secret_strings(data["result"], secrets)
-    data["error_message"] = _redact_secret_strings(
-        data["error_message"], secrets
+    cleaned_args, cleaned_result, cleaned_error_message, redacted = _sanitize_record_payload(
+        data["args"],
+        data["result"],
+        data["error_message"],
     )
+    data["args"] = cleaned_args
+    data["result"] = cleaned_result
+    data["error_message"] = cleaned_error_message
     data["replayable"] = bool(data["replayable"]) and not redacted
     with open(trace_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(data, ensure_ascii=False) + "\n")

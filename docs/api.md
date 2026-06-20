@@ -36,8 +36,8 @@ MCP prompts 是分发层指导，用于让客户端安装 server 后直接发现
 
 ### 感知类
 
-- `get_ui_snapshot`：返回当前 UI 自动化树的结构化快照，含每个可交互控件的 `uid`、`name`、`control_type`、`class_name`、`bbox`（相对虚拟屏幕坐标）和 `path`。默认 `scope=foreground`（仅前台窗口），可传 `scope=desktop` 遍历完整桌面；可传 `include_screenshot=true` 同时保存一张截图并返回路径。返回的 `uid` 是**快照级自包含句柄**，仅在本次快照返回结果中有效；窗口刷新或 UI 重排后复用会返回 `{"error": "stale_uid"}`。遍历完整桌面可能耗时数秒，优先使用前台窗口范围。
-- `screenshot`：截图后保存为 PNG，返回 `screenshot_taken`、`monitor`、`width`、`height`、`saved_path`、`timestamp`。图像从不会以 base64 形式进入上下文，模型应使用返回的路径通过 `ReadMediaFile` 等工具读取。默认捕获主屏（`monitor=1`），传 `monitor=0` 可捕获整个虚拟桌面，传 `save_path` 可覆盖保存位置。保存目录可在 `config.yaml` 的 `screenshot_dir` 中配置。保存前会在当前光标位置叠加红色十字标记；捕获单个显示器时会按该显示器左上角换算图像内坐标，光标不在捕获范围内则不绘制。
+- `get_ui_snapshot`：返回当前 UI 自动化树的结构化快照，含每个可交互控件的 `uid`、`name`、`control_type`、`class_name`、`bbox`（相对虚拟屏幕坐标）和 `path`。默认 `scope=foreground`（仅前台窗口），可传 `scope=desktop` 遍历完整桌面；可传 `include_screenshot=true` 同时保存一张截图并返回路径。返回的 `uid` 是**快照级自包含句柄**，仅在本次快照返回结果中有效；窗口刷新或 UI 重排后复用会返回 `{"error": "stale_uid"}`。遍历完整桌面可能耗时数秒，且输出 JSON 可达数百 KB（高成本操作，易导致上下文膨胀），优先使用前台窗口范围。**不要使用 `scope=desktop` 配合 `include_screenshot=true`；该组合会被 MCP 分发层直接拦截并返回 `high_cost_snapshot_blocked`。** 即便只取 `scope=desktop`，序列化后的 JSON 一旦超过内联预算（默认 200K chars）会被替换为 `snapshot_output_too_large` 紧凑错误，避免数百 KB 甚至 MB 级工具输出进入上下文；此时应改用 `scope=foreground` 或 `find_control` 配合窄条件。
+- `screenshot`：截图后保存为 PNG，返回 `screenshot_taken`、`monitor`、`width`、`height`、`saved_path`、`timestamp`、`coordinate_space`（`monitor` 或 `virtual_desktop`）、`capture_left`、`capture_top`、`metadata_path`。图像从不会以 base64 形式进入上下文，模型应使用返回的路径通过 `ReadMediaFile` 等工具读取。默认捕获主屏（`monitor=1`），传 `monitor=0` 可捕获整个虚拟桌面，传 `save_path` 可覆盖保存位置。保存目录可在 `config.yaml` 的 `screenshot_dir` 中配置。保存前会在当前光标位置叠加红色十字标记；捕获单个显示器时会按该显示器左上角换算图像内坐标，光标不在捕获范围内则不绘制。PNG 旁会写入 sidecar JSON（`<saved_path>.json`），包含 `schema_version`、`screenshot_path`、`monitor`、`coordinate_space`、`capture_left`、`capture_top`、`width`、`height`、`created_at`，供 `click_on_screenshot` 和 `crop_screenshot` 映射图像像素到屏幕坐标。
 - `get_monitors`：返回所有显示器的物理边界和主副标识，帮助 Agent 理解坐标系。
 
 ### 输入类
@@ -47,6 +47,7 @@ MCP prompts 是分发层指导，用于让客户端安装 server 后直接发现
   - `click` 支持 `double_click=true`：执行原生双击，兼容 `target_name` 和坐标两种定位模式，也兼容 `button`。
   - 支持 `target_name` 参数：按 UIA 控件名称定位，命中后取控件中心点击/移动；未命中且同时提供了 `(x, y)` 时回退到坐标模式。
   - `match`：与 `target_name` 配合，取值 `exact` / `contains` / `startswith`，默认 `contains`。
+  - **`clicked=true` 只表示输入事件已发出，不表示业务操作成功。** 点击后必须通过新截图、UIA 查询或观察到的状态变化来验证业务结果。
 - `mouse_down` / `mouse_up`：在主屏坐标按下或释放鼠标按键，支持 `left`/`right`/`middle`。`mouse_up` 的坐标可选；省略时仍校验当前光标位于主屏后再释放。
 - `drag`：从 `(start_x, start_y)` 拖拽到 `(end_x, end_y)`，支持指定 `button` 和 `duration`。
   - 在任何移动或按键输入发生前，起点和终点都会分别执行坐标与实时目标窗口检查；任一点不安全时不会开始拖拽。
@@ -55,6 +56,8 @@ MCP prompts 是分发层指导，用于让客户端安装 server 后直接发现
 - `key_combo`：模拟组合键（如 `ctrl`, `c`）。
 - `key_down` / `key_up` / `press_key`：更细粒度的键盘事件，分别用于按住、释放、按压单个键，便于构造 `ctrl`/`shift`/`alt` 等组合或长按场景。
 - `click_by_uid`：snapshot 仅提供 UID 对应的定位坐标；执行点击前会按最终坐标实时检查目标窗口，不信任客户端 snapshot 中的进程、窗口类名或控件类型元数据。
+- `click_on_screenshot`：在已保存的截图上按图像像素坐标点击。读取截图的 sidecar metadata（`<saved_path>.json`）将 `(image_x, image_y)` 映射为屏幕坐标，再走完整安全链（`validate_coordinate` → `inspect_point` → `check_target_window`）。映射后坐标仍受主屏输入限制，落入副屏会被 `SafetyError` 拒绝。缺少 sidecar 时返回 `screenshot_metadata_not_found`；图像坐标越界返回 `image_coordinate_out_of_bounds`；PNG 缺失返回 `screenshot_file_not_found`。**视觉目标应优先使用此工具，而非从缩放聊天预览估算裸 `click(x, y)` 坐标。** 支持 `button`、`duration`、`double_click` 参数。成功返回包含 `screen_x`/`screen_y`/`coordinate_space`/`monitor`，便于 trace 复盘。
+- `crop_screenshot`：从已保存的截图中裁剪一个区域，保留坐标 metadata 以供后续 `click_on_screenshot`。裁剪图的 `capture_left/capture_top` 继承源截图的偏移量（`source_capture_left + x`、`source_capture_top + y`），因此对裁剪图调用 `click_on_screenshot(image_x, image_y)` 仍能映射回原始屏幕坐标。用于放大观察小目标。裁剪区域越界时返回 `image_coordinate_out_of_bounds`。
 
 ### 控件类
 
@@ -73,7 +76,7 @@ MCP prompts 是分发层指导，用于让客户端安装 server 后直接发现
 
 ### 批量执行类
 
-- `batch`：在一次调用里顺序执行多个工具，适合把 GUI 工作流（如“启动 → 点击菜单 → 选择项 → 截图验证”）打包成一次请求，减少长上下文下的回合数。**直接调用此工具即可，不要在 Python/Bash 里写 `import sys/json/time` 来包装 `_call_tool`**。参数：
+- `batch`：在一次调用里顺序执行多个工具，适合把 GUI 工作流（如“启动 → 点击菜单 → 选择项 → 截图验证”）打包成一次请求，减少长上下文下的回合数。**直接调用此工具即可，不要在 Python/Bash 里写 `import sys/json/time` 来包装 `_call_tool`**。**注意：`batch` 减少往返次数，但不减少观察/验证。** 只在目标已确认后将机械序列打包成 batch；不要把“对多个坐标的盲点”打包进 batch，batch 中的每个坐标都应已通过预验证。参数：
   - `actions`：工具调用数组，每项包含 `tool`（canonical 工具名）、`args`（参数对象），以及可选的 `capture_snapshot`（在该动作执行前调用 `get_ui_snapshot` 并保存 UI-tree JSON 路径到该步骤结果的 `snapshot` 字段，便于复盘定位）。
   - `stop_on_error`（默认 `true`）：遇到错误时是否停止后续动作。
   - `final_screenshot`（默认 `false`）：执行完成后是否追加一张最终截图。截图会保存到磁盘并在 `final_screenshot` 中返回 `{saved_path, monitor, width, height, timestamp}`，不会返回 base64。
@@ -135,6 +138,25 @@ MCP prompts 是分发层指导，用于让客户端安装 server 后直接发现
 3. screenshot()                         # 保存截图并通过路径读取，验证打开的页面
 ```
 
+### 自绘 GUI 坐标点击安全示例
+
+对自绘界面（游戏、Delphi/VCL 等无法用 UIA 精确定位按钮的程序），按以下完整安全流程操作。核心是 **move_to → screenshot 验证落点 → click → screenshot 验证状态变化**：
+
+```text
+1. start_task(goal="打开对话回顾面板")
+2. screenshot(monitor=1)                    # 观察当前界面，确定目标位置
+3. move_to(x=204, y=45)                    # 移到预估目标位置
+4. screenshot(monitor=1)                    # 验证红色光标标记落在目标中心
+5. click(x=204, y=45)                      # 确认落点后点击
+6. screenshot(monitor=1)                    # 验证 GUI 状态已变化
+7. review_task_session(task_id, detail=True)  # 复盘步骤和坐标
+8. finish_task(task_id, summary="成功打开对话回顾面板")
+```
+
+要点：
+- 步骤 3-4 是 **pre-click 落点预验证**，步骤 6 是 **post-click 状态验证**，两者缺一不可。
+- 若步骤 6 显示 GUI 无变化，最多允许一次重新测量；禁止在原错误坐标附近 3-5 像素盲调。
+
 ### 复合执行类
 
 - `click_by_uid`：根据 `get_ui_snapshot` 返回的 `uid` 点击对应控件。必须同时传入完整的 `snapshot` 对象（UID 仅在当前快照内有效）。句柄失效时返回 `{"error": "stale_uid"}`。
@@ -158,7 +180,7 @@ MCP prompts 是分发层指导，用于让客户端安装 server 后直接发现
   - 重放使用新的 `step_index` 字符串，如 `"3.retry.1"`，追加到原 `trace.jsonl`。
   - 重放时不直接复用旧结果，而是重新调用底层工具，由当前 UI 状态重新定位并重新执行安全检查。
   - 含已脱敏输入的步骤标记为 `replayable=false`，返回 `retry_not_supported_for_redacted_step`，不会执行脱敏占位符。
-- `review_task(trace_id)`：读取 trace 并生成确定性统计摘要（总步骤数、成功/失败/重试数、错误类型分布、平均耗时、截图/快照索引），不调用 LLM。
+- `review_task(trace_id, detail=False)`：读取 trace 并生成确定性统计摘要（总步骤数、成功/失败/重试数、错误类型分布、平均耗时、截图/快照索引），不调用 LLM。`detail=True` 时在返回中追加 `steps` 数组，每项含 `step_index`、`tool`、`args`（已脱敏）、`result`（已脱敏）、`duration_ms`、`screenshot_path`、`ui_snapshot_path`、`error_kind`、`error_message`，支持精确坐标复盘和自动化断言。默认 `False` 保持紧凑输出。
 
 ## 业务任务会话
 
@@ -180,9 +202,11 @@ MCP prompts 是分发层指导，用于让客户端安装 server 后直接发现
 - `finish_task(task_id, summary?, cancel?)`：结束显式 task；最终成功或失败由已登记 trace 派生，调用方不能伪造成功状态。
 - `get_task(task_id)`：读取 task 元数据和 trace 归属列表。
 - `list_tasks(date?, status?, limit?)`：按创建时间倒序列出 task，可按本地业务日期和状态过滤。
-- `review_task_session(task_id)`：聚合该 task 下所有 trace 的确定性复盘，输出 task 时间线、失败 trace、错误类型和实际存在的产物路径。
+- `review_task_session(task_id, detail=False)`：聚合该 task 下所有 trace 的确定性复盘，输出 task 时间线、失败 trace、错误类型和实际存在的产物路径。`detail=True` 时每个 trace 的 review 中包含 `steps` 数组（透传 `review_task(detail=True)`）。MCP 分发直接委托 `review.review_task_session`，与 Python API 路径等价；CLI 仍默认输出紧凑复盘。
 
 所有可执行顶层工具都支持可选 `task_id`；task 管理工具和只读单 trace 复盘 `review_task` 不使用归属上下文。`task_id` 只在 MCP/runner 层用于归属管理，不会传给 `core.py`、`safety.py` 或 UIA 底层函数。
+
+**`task_id` 守卫**：`start_task` 之后，只要存在未结束的显式 task，所有可执行顶层工具调用必须显式传 `task_id`。缺失时 MCP 分发层直接返回 `missing_task_id`（含 `active_task_id`）或 `missing_task_id_ambiguous`（多个 active task），工具不会执行也不会创建新的 standalone trace；agent 应使用返回的 `active_task_id` 重试或先结束冲突的 task。
 
 ## Trace 与复盘
 

@@ -22,11 +22,15 @@ def _parse_timestamp(value: str) -> datetime:
         return datetime.now(timezone.utc)
 
 
-def review_task(trace_id: str) -> dict[str, Any]:
+def review_task(trace_id: str, detail: bool = False) -> dict[str, Any]:
     """Generate a deterministic summary for the given trace.
 
     Returns a dict with goal, counts, error distribution, timing stats, and
     screenshot/snapshot indexes. Does not call any LLM.
+
+    When ``detail=True``, adds a ``"steps"`` list with per-step records.
+    Persisted traces are sanitized at write time, and review sanitizes again so
+    older or manually written trace files do not leak sensitive values.
     """
     records = trace_module.read_trace(trace_id)
     if not records:
@@ -62,7 +66,7 @@ def review_task(trace_id: str) -> dict[str, Any]:
         start_time = records[0].get("start_time", "")
         end_time = records[-1].get("start_time", "")
 
-    return {
+    result = {
         "trace_id": trace_id,
         "goal": goal,
         "summary": {
@@ -87,13 +91,38 @@ def review_task(trace_id: str) -> dict[str, Any]:
         "improvement_suggestions_placeholder": "Future work: client-side LLM can summarize error patterns here.",
     }
 
+    if detail:
+        steps = []
+        for rec in records:
+            args, step_result, error_message = trace_module.sanitize_trace_payload(
+                rec.get("args", {}),
+                rec.get("result"),
+                rec.get("error_message"),
+            )
+            steps.append(
+                {
+                    "step_index": rec.get("step_index"),
+                    "tool": rec.get("tool", ""),
+                    "args": args,
+                    "result": step_result,
+                    "duration_ms": rec.get("duration_ms", 0),
+                    "screenshot_path": rec.get("screenshot_path"),
+                    "ui_snapshot_path": rec.get("ui_snapshot_path"),
+                    "error_kind": rec.get("error_kind"),
+                    "error_message": error_message,
+                }
+            )
+        result["steps"] = steps
+
+    return result
+
 
 def generate_deterministic_report(trace_id: str, goal: str | None = None) -> Path:
     """Generate ``report.md`` using the existing trace report generator."""
     return trace_module.generate_report(trace_id, goal=goal)
 
 
-def review_task_session(task_id: str) -> dict[str, Any]:
+def review_task_session(task_id: str, detail: bool = False) -> dict[str, Any]:
     """Generate a deterministic summary for a business task session."""
     from computer_use import task_session
 
@@ -105,7 +134,7 @@ def review_task_session(task_id: str) -> dict[str, Any]:
         trace_id = link.get("trace_id")
         if not isinstance(trace_id, str):
             continue
-        trace_review = review_task(trace_id)
+        trace_review = review_task(trace_id, detail=detail)
         if trace_review.get("error"):
             reviewed_traces.append({**link, "review": trace_review})
             continue

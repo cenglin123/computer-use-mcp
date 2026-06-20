@@ -32,6 +32,7 @@
 10. **GUI 操作标准化闭环**：接到 GUI 任务后先分解为 `n` 步；每步循环：截图确认元素位置 → 基于沉淀经验和 UIA/视觉信息确定参数 → 调用 MCP 原生工具模块（`screenshot`/`click`/`move_to`/`type`/`key_combo`/`find_control`/`sleep` 等）执行 → 截图验证效果再推导下一步。把基本操作固化为带参数的模块调用，避免每轮重新猜测参数；若多模态识别有偏差，用偏移量修正而非换策略。
 11. **桌面图标坐标应读 `SysListView32`，不要目测**：Windows 桌面图标列表的精确位置可通过 `LVM_GETITEMPOSITION` 获取；目测 3840×1089 截图极易点错。一旦坐标点击后目标未出现，应立刻用 OS API 验证位置，而不是重复点击。
 12. **每个工具响应都带 `timestamp`**：便于复盘时精确计算各步骤间隔，区分系统响应时间与 Agent 思考时间。
+13. **截图坐标绑定优先于裸坐标点击**：`screenshot` 写入 sidecar JSON（`<saved_path>.json`）记录 `capture_left`/`capture_top`/`coordinate_space`；Agent 应优先使用 `click_on_screenshot(screenshot_path, image_x, image_y)` 而非从缩放聊天预览估算裸 `click(x, y)`。小目标先用 `crop_screenshot` 裁剪放大（裁剪图继承坐标偏移）。映射后仍走完整安全链，副屏坐标被 `SafetyError` 拒绝。
 
 ## 参考文件
 

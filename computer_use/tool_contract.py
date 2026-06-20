@@ -11,6 +11,8 @@ ATOMIC_AND_COMPOSITE_TOOL_NAMES = (
     "screenshot",
     "get_monitors",
     "click",
+    "click_on_screenshot",
+    "crop_screenshot",
     "move_to",
     "scroll",
     "type",
