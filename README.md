@@ -78,7 +78,7 @@ If you use [cc-switch](https://github.com/Cong-Cong-Man/ClaudeCodeSwitch) to man
 4. Click **Add MCP** / **+** and fill in:
    - **Name**: `computer-use`
    - **Type**: `stdio`
-   - **Command**: `C:\Project\computer-use-mcp\.venv\Scripts\python.exe`
+   - **Command**: the absolute path to this checkout's Python interpreter, e.g. `C:\Users\<you>\Projects\computer-use-mcp\.venv\Scripts\python.exe`
    - **Args**: `-m computer_use.mcp_server`
 5. Enable the clients you want (opencode, codex, gemini, etc.).
 6. Reactivate the MCP entry or restart the target client to pick up the latest code after updates.
@@ -89,7 +89,7 @@ If you use [cc-switch](https://github.com/Cong-Cong-Man/ClaudeCodeSwitch) to man
 {
   "mcpServers": {
     "computer-use": {
-      "command": "C:\\Project\\computer-use-mcp\\.venv\\Scripts\\python.exe",
+      "command": "C:\\Users\\<you>\\Projects\\computer-use-mcp\\.venv\\Scripts\\python.exe",
       "args": ["-m", "computer_use.mcp_server"]
     }
   }
@@ -100,7 +100,7 @@ If you use [cc-switch](https://github.com/Cong-Cong-Man/ClaudeCodeSwitch) to man
 
 ```toml
 [mcp.servers.computer-use]
-command = "C:\\Project\\computer-use-mcp\\.venv\\Scripts\\python.exe"
+command = "C:\\Users\\<you>\\Projects\\computer-use-mcp\\.venv\\Scripts\\python.exe"
 args = ["-m", "computer_use.mcp_server"]
 ```
 
