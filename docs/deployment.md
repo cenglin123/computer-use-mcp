@@ -31,7 +31,7 @@
 - **权威源文件**：仓库内 `skills/computer-use/SKILL.md`（`.agents/skills/computer-use/SKILL.md` 是项目内同步副本，内容逐字一致，二者皆可作为源）。
 - **目标位置**：`C:\Users\<用户名>\.agents\skills\computer-use\SKILL.md`（即 `~/.agents/skills/computer-use/SKILL.md`）。
 
-复制方式（Windows PowerShell，快照式，SKILL 更新后需重新复制）：
+用**复制**安装（Windows PowerShell）：
 
 ```powershell
 $dest = "$env:USERPROFILE\.agents\skills\computer-use"
@@ -39,19 +39,19 @@ New-Item -ItemType Directory -Force $dest | Out-Null
 Copy-Item "<仓库根目录>\skills\computer-use\SKILL.md" "$dest\SKILL.md" -Force
 ```
 
-链接方式（符号链接，随仓库更新自动跟随；需管理员权限或开启开发者模式）：
+SKILL 更新后**重新同步**（从仓库本地开发时，一条命令同步到 `~/.agents`，存在则一并同步 `~/.claude`）：
 
 ```powershell
-$dest = "$env:USERPROFILE\.agents\skills\computer-use"
-New-Item -ItemType Directory -Force $dest | Out-Null
-New-Item -ItemType SymbolicLink -Path "$dest\SKILL.md" -Target "<仓库根目录>\skills\computer-use\SKILL.md"
+python "<仓库根目录>\scripts\sync_global_skill.py"
 ```
 
 注意：
 
-- **链接 vs 复制**：链接让全局技能始终跟随仓库内最新 SKILL；复制是快照，仓库 SKILL 更新后须重新复制。分发场景若仓库会随版本更新，优先用链接。
+- **必须用复制，不要用符号链接**。agent 框架修改文件普遍是「先删后写」，会把符号链接替换成普通文件、导致链接断开（之后全局副本不再跟随仓库）。因此对会被 agent 改写的文件，symlink 不可靠；用复制 + 上面的再同步脚本。
+- **复制是快照**：仓库 SKILL 每次变更后都要重新复制 / 跑同步脚本，否则全局副本会停在旧版。
 - **必须保留 frontmatter**：`SKILL.md` 顶部的 `name` / `description` 不能删，框架靠 `description` 判断何时加载该技能。
-- **Claude Code 用户**：其全局技能路径是 `~/.claude/skills/computer-use/SKILL.md`，同样可复制或链接到该处。
+- **Claude Code 用户**：其全局技能路径是 `~/.claude/skills/computer-use/SKILL.md`；`sync_global_skill.py` 在该目录已存在时会一并同步。
+- 该全局副本在用户本机、不在仓库内，不受 `test_skill_copies_are_identical`（只保证仓库内 `skills/` 与 `.agents/skills/` 两份一致）约束。
 - 安装后可在 agent 中确认该 skill 能被按需触发，再执行真实 GUI 任务。
 
 ### 开发环境

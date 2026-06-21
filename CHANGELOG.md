@@ -85,6 +85,14 @@
 - - 实现独立模块 review_report.py(与只读 review.py 分层);属元操作,不受 task_id 守卫约束、不进 batch/task 嵌套白名单;config 新增 review_dir。SKILL 新增 Retrospective Reports 模板与触发流程并同步 .agents;docs api/deployment 同步。
 - - 迁移影响:纯新增,无破坏性。
 
+### docs: 全局 SKILL 同步改用复制+脚本(弃用符号链接)
+
+#### 变更内容
+- - 纠正部署文档:不要用符号链接安装全局 SKILL。agent 框架"先删后写"会把 symlink 替换为普通文件、断开链接,导致全局副本不再跟随仓库;对会被 agent 改写的文件 symlink 不可靠。改为复制 + 再同步脚本。
+- - 新增 scripts/sync_global_skill.py:把仓库 skills/computer-use/SKILL.md 复制到 ~/.agents/skills/computer-use/SKILL.md;仅当 ~/.claude/skills/computer-use/SKILL.md 已存在时一并更新(不新建,避免擅自在 Claude Code 全局启用该 skill)。SKILL 变更后跑一次即可。
+- - deployment.md 更新安装/再同步说明,并指明全局副本不受 test_skill_copies_are_identical 约束。
+
+
 
 
 
