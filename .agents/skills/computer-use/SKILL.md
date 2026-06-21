@@ -173,10 +173,21 @@ Large screenshots, UIA JSON, and base64 image data accumulate in context and deg
 
 - **Do not use** `get_ui_snapshot(scope="desktop", include_screenshot=true)`. It is blocked because it can create huge tool output. Use `scope="foreground"` instead, or `scope="desktop"` without `include_screenshot`. If a desktop snapshot still exceeds the inline budget, the server returns `snapshot_output_too_large`; switch to `find_control` with narrow criteria.
 - **Never call the CLI** `python -m computer_use screenshot` for visual understanding. It outputs base64 PNG to stdout, which enters tool output and context as raw image data.
-- **Use the MCP** `screenshot` **tool** instead; it returns only `saved_path`. Do not repeatedly read PNG screenshots into context. Read only the latest screenshot needed for visual reasoning; after 2-3 image reads or any tool response over 60s, stop and summarize.
+- **Use the MCP** `screenshot` **tool** instead; by default it returns only `saved_path`. Do not repeatedly read PNG screenshots into context. Read only the latest screenshot needed for visual reasoning; after 2-3 image reads or any tool response over 60s, stop and summarize.
+- **`include_image=true` opt-in**: on a client that renders image tool results, you may pass `include_image=true` to receive the screenshot inline (a full-resolution `ImageContent` block, returned *in addition to* `saved_path`) and skip the separate file read. This is the one sanctioned exception to "screenshot returns only a path" — the base64 lives in a dedicated `ImageContent` block, never inside the JSON text. Reserve it for screenshots you actually need to reason about visually; keep it off for landing-verification / intermediate checks to save vision tokens and transport bytes. Oversized captures (e.g. `monitor=0`) silently fall back to path-only with `inline_image_skipped`.
 - **Default** `get_ui_snapshot(scope="foreground", include_screenshot=false)`. Use `scope="desktop"` only when cross-window positioning is needed - desktop JSON can reach hundreds of KB.
 - **Do not read complete tool-output JSON**; use precise filtering or small summaries.
 - **Long-context budget rule**: when a single tool response takes more than 60 seconds, or when consecutive tool outputs are cumulatively large (multiple PNG reads, truncated desktop JSON), stop visual iteration, summarize current state, and start a new session or ask the user to confirm continuing.
+
+### Long-Session Performance Discipline
+
+Each full-screen screenshot (whether read via the file tool or returned with `include_image=true`) is ~2-4 MB of image data that **stays in the conversation for the rest of the session**. Per-turn latency scales with the accumulated image payload, so a long task gets progressively slower. Keep the running total small:
+
+- **Crop after orienting.** Take at most one full-screen screenshot to locate the target; for every subsequent observation use `crop_screenshot` (or screenshot then crop) and reason about the small region. A 300x120 crop is a tiny fraction of a 1920x1080 frame in context — this is the single biggest lever you control.
+- **One observation per state change.** Do not re-screenshot when nothing changed. Verify with the cursor marker on a crop, not a fresh full frame, when possible.
+- **One task per session.** Old screenshots from a finished task keep costing tokens on every later turn. Start a fresh session for a new task instead of piling tasks into one long conversation.
+- **Keep turns flowing.** Prompt caching expires after a few minutes idle; a long pause forces the next turn to reprocess the whole accumulated context (including every retained image) as fresh, expensive input. The slow turns in a long session are usually these cache misses, not any single tool call.
+- **`include_image` only when needed now.** Do not inline a full frame when a crop suffices, and never both inline and separately read the same screenshot.
 
 ## Failure Handling
 
@@ -190,4 +201,4 @@ Large screenshots, UIA JSON, and base64 image data accumulate in context and deg
 
 - Report what was done, the final observed state, and the trace/task evidence path when available.
 - Mention any limitations that affected reliability, such as inability to read screenshots, remote-control interference, mixed DPI, inaccessible UIA controls, or blocked target windows.
-- Do not include screenshot base64 in responses; reference saved local paths returned by the MCP tools.
+- Do not include screenshot base64 in your text responses; reference saved local paths returned by the MCP tools. (The `screenshot include_image=true` exception delivers base64 only inside a dedicated `ImageContent` tool-result block, not in text.)

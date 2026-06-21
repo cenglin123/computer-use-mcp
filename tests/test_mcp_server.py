@@ -96,6 +96,109 @@ def test_tools_have_dispatch_handlers() -> None:
     assert registered <= handled, f"missing dispatch handlers for {registered - handled}"
 
 
+def test_activate_window_dispatch_routes_name(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
+    captured: dict[str, object] = {}
+
+    def fake_activate(name):
+        captured["name"] = name
+        return {"activated": True, "name": name, "process_name": "game.exe", "rect": None}
+
+    monkeypatch.setattr(server, "activate_window", fake_activate)
+
+    data = json.loads(_call_tool("activate_window", {"name": "Genshin"}))
+    assert captured["name"] == "Genshin"
+    assert data["activated"] is True
+
+
+def _png_result(path: Path, extra: dict | None = None) -> str:
+    payload = {"screenshot_taken": True, "saved_path": str(path), "width": 100, "height": 50}
+    if extra:
+        payload.update(extra)
+    return json.dumps(payload)
+
+
+def test_screenshot_inline_appends_full_image(tmp_path) -> None:
+    import asyncio
+    import base64
+    import computer_use.mcp_server as server
+
+    png = tmp_path / "shot.png"
+    raw = b"\x89PNG\r\n\x1a\n fake png bytes"
+    png.write_bytes(raw)
+
+    content = asyncio.run(server._screenshot_result_content(_png_result(png)))
+
+    assert len(content) == 2
+    text, image = content
+    assert text.type == "text"
+    assert json.loads(text.text)["inline_image"] is True
+    assert image.type == "image"
+    assert image.mimeType == "image/png"
+    assert base64.b64decode(image.data) == raw
+    # base64 must never leak into the text block
+    assert image.data not in text.text
+
+
+def test_screenshot_inline_missing_file_degrades(tmp_path) -> None:
+    import asyncio
+    import computer_use.mcp_server as server
+
+    content = asyncio.run(
+        server._screenshot_result_content(_png_result(tmp_path / "missing.png"))
+    )
+    assert len(content) == 1
+    assert json.loads(content[0].text)["inline_image"] is False
+
+
+def test_screenshot_inline_error_result_passthrough() -> None:
+    import asyncio
+    import computer_use.mcp_server as server
+
+    err = json.dumps({"error": "Failed to save screenshot: boom"})
+    content = asyncio.run(server._screenshot_result_content(err))
+    assert len(content) == 1
+    assert content[0].text == err
+
+
+def test_screenshot_inline_too_large_skips(tmp_path) -> None:
+    import asyncio
+    import computer_use.mcp_server as server
+
+    png = tmp_path / "big.png"
+    png.write_bytes(b"\x00" * (server._MAX_INLINE_IMAGE_RAW_BYTES + 1))
+
+    content = asyncio.run(server._screenshot_result_content(_png_result(png)))
+    assert len(content) == 1
+    assert json.loads(content[0].text)["inline_image_skipped"] == "payload_too_large"
+
+
+def test_screenshot_inline_unparseable_passthrough() -> None:
+    import asyncio
+    import computer_use.mcp_server as server
+
+    content = asyncio.run(server._screenshot_result_content("not json at all"))
+    assert len(content) == 1
+    assert content[0].text == "not json at all"
+
+
+def test_include_image_not_forwarded_to_dispatch(monkeypatch) -> None:
+    import computer_use.mcp_server as server
+
+    captured: dict[str, object] = {}
+
+    def fake_dispatch(name, args, cs, **kwargs):
+        captured["args"] = dict(args)
+        return json.dumps({"ok": True})
+
+    monkeypatch.setattr(server, "_dispatch_tool", fake_dispatch)
+
+    _call_tool("screenshot", {"monitor": 1, "include_image": True})
+    assert "include_image" not in captured["args"]
+    assert captured["args"]["monitor"] == 1
+
+
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [

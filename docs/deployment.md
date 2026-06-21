@@ -13,7 +13,16 @@
 
 ### 模型能力要求
 
-本 MCP 不内置视觉模型，也不返回截图 base64。`screenshot` 保存 PNG 到本地并返回路径，Agent 读取该文件即可观察界面。如果 Agent 无法读取图像内容，可回退到结构化 UIA、trace/task 审计和维护类工具。
+本 MCP 不内置视觉模型，默认不返回截图 base64。`screenshot` 保存 PNG 到本地并返回路径，Agent 读取该文件即可观察界面。如果 Agent 无法读取图像内容，可回退到结构化 UIA、trace/task 审计和维护类工具。
+
+#### 何时开启 `screenshot include_image`
+
+`screenshot` 支持可选 `include_image=true`，把全分辨率截图作为独立 `ImageContent` 块随结果内联返回，省去"截图→读盘"两个往返中的读盘那次。开启前提与权衡：
+
+- **客户端必须会渲染 MCP 工具结果里的 `ImageContent`**。Agent 无标准机制动态探测宿主能力，因此这是**运维侧判断**：仅在已确认支持的客户端上启用（已验证 OpenCode + Kimi 支持渲染）；不支持的客户端开了等于白传几 MB、零收益。
+- **仅 stdio 传输**。当前为 stdio-only，无 SSE 消息体上限问题；若将来引入 SSE/HTTP 代理，大 base64 会撞上代理消息上限，需另行处理。
+- **体积**：单屏 PNG 常 1–5MB；base64 超 3MB（约 2.25MB 原始 PNG，典型见于 `monitor=0` 全虚拟桌面）会自动退化为纯路径并加 `inline_image_skipped`。
+- **粒度**：本期仅 per-call 开启（按需在 `screenshot` 调用上传参），不提供部署级全局默认。
 
 ### 开发环境
 

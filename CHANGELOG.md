@@ -56,6 +56,13 @@
 #### 变更内容
 - - 针对工具栏/图标行这类"沿单轴密排的相似控件"场景,在 SKILL Pre-Click Verification 增补规则:按功能而非位置识别目标、裁剪收紧到单个候选、在判别轴上用 move_to + 红十字预验证后再点。源于一次原神左上角图标行执行中 x 方向反复选偏(横排布局下 y 退化为无信息轴,误差全部集中到 x)的复盘。已同步 .agents 副本。
 
+### feat: screenshot 支持可选内联返图 (include_image)
+
+#### 变更内容
+- - `screenshot` 新增 `include_image`(默认 false):为会渲染图像工具结果的多模态客户端,把全分辨率截图作为独立 `ImageContent` 块随结果内联返回,省去"截图→读盘"的读盘往返。base64 只在 ImageContent 块,绝不进 JSON 文本。
+- - 安全退化:解析失败/缺文件/错误结果/读编码失败均退回纯路径;base64 超 3MB(典型 monitor=0)静默退化并加 `inline_image_skipped`;成功加 `inline_image: true`。读图+base64 走 `asyncio.to_thread` 不阻塞事件循环;`include_image` 在 dispatch 层 pop,不入 trace。
+- - 仅顶层单次 screenshot 内联,batch/run_task_plan 内不内联;仅 stdio 传输适用。
+- - 迁移影响:无破坏性,默认行为(纯路径)与 text-only 客户端不变。开启前提:客户端须支持渲染 ImageContent(已验证 OpenCode+Kimi 支持)。文档:SKILL/api/deployment 已调和原"绝不返回 base64"的绝对表述为带 opt-in 例外。
 
 
 

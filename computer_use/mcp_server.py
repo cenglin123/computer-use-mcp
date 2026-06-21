@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import json
 import logging
 import logging.handlers
@@ -17,7 +19,14 @@ import pyautogui
 from PIL import Image as PILImage
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import GetPromptResult, Prompt, PromptMessage, TextContent, Tool
+from mcp.types import (
+    GetPromptResult,
+    ImageContent,
+    Prompt,
+    PromptMessage,
+    TextContent,
+    Tool,
+)
 
 from computer_use import guidance
 from computer_use.config import load_config
@@ -251,6 +260,9 @@ def _call_tool(
     dispatch_args = dict(args)
     if name not in _TASK_MANAGEMENT_TOOLS:
         dispatch_args.pop("task_id", None)
+    # include_image is consumed by the MCP exit handler (inline ImageContent),
+    # not by dispatch; drop it so it never reaches the tool or the trace record.
+    dispatch_args.pop("include_image", None)
     logging.info(
         "tool=%s args=%s", name, trace_module.sanitize_for_logging(dispatch_args)
     )
@@ -1555,6 +1567,62 @@ def _handle_tool_call(name: str, arguments: dict) -> str:
             _finish_standalone_context(context)
 
 
+#: Maximum base64 payload size for an inline screenshot ImageContent block.
+#: Larger screenshots (e.g. monitor=0 virtual desktop) silently fall back to
+#: path-only so a multi-MB payload never floods the transport.
+MAX_INLINE_IMAGE_BASE64_BYTES = 3_000_000
+#: Raw PNG byte budget that, after base64's ~4/3 inflation, stays under the cap.
+_MAX_INLINE_IMAGE_RAW_BYTES = MAX_INLINE_IMAGE_BASE64_BYTES * 3 // 4
+
+
+def _encode_png_base64(path: Path) -> str:
+    return base64.b64encode(path.read_bytes()).decode("ascii")
+
+
+async def _screenshot_result_content(result_text: str) -> list[TextContent | ImageContent]:
+    """Augment a screenshot result with an inline ImageContent block.
+
+    Reads the saved PNG and appends it as a proper MCP ImageContent (never as
+    base64 inside the JSON text). Any problem — unparseable result, error
+    result, missing file, oversized payload, or read failure — degrades safely
+    to a path-only TextContent so inlining can never break the main result.
+    """
+    try:
+        data = json.loads(result_text)
+    except (json.JSONDecodeError, TypeError):
+        return [TextContent(type="text", text=result_text)]
+    if not isinstance(data, dict):
+        return [TextContent(type="text", text=result_text)]
+
+    saved_path = data.get("saved_path")
+    if "error" in data or not isinstance(saved_path, str) or not saved_path:
+        return [TextContent(type="text", text=result_text)]
+
+    path = Path(saved_path)
+    try:
+        raw_size = path.stat().st_size
+    except OSError:
+        data["inline_image"] = False
+        return [TextContent(type="text", text=json.dumps(data))]
+
+    if raw_size > _MAX_INLINE_IMAGE_RAW_BYTES:
+        data["inline_image_skipped"] = "payload_too_large"
+        return [TextContent(type="text", text=json.dumps(data))]
+
+    try:
+        encoded = await asyncio.to_thread(_encode_png_base64, path)
+    except Exception as exc:
+        logging.warning("inline screenshot encode failed: %s", exc)
+        data["inline_image"] = False
+        return [TextContent(type="text", text=json.dumps(data))]
+
+    data["inline_image"] = True
+    return [
+        TextContent(type="text", text=json.dumps(data)),
+        ImageContent(type="image", data=encoded, mimeType="image/png"),
+    ]
+
+
 async def serve() -> None:
     _setup_logging()
     server = Server("computer-use")
@@ -1576,8 +1644,10 @@ async def serve() -> None:
         return _get_prompt(name)
 
     @server.call_tool()
-    async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    async def call_tool(name: str, arguments: dict) -> list[TextContent | ImageContent]:
         result = _handle_tool_call(name, arguments)
+        if name == "screenshot" and (arguments or {}).get("include_image"):
+            return await _screenshot_result_content(result)
         return [TextContent(type="text", text=result)]
 
     async with stdio_server() as (read_stream, write_stream):

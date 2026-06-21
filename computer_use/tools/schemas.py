@@ -19,7 +19,7 @@ _TASK_CONTEXT_EXCLUDED_TOOLS = _TASK_MANAGEMENT_TOOLS | {"review_task"}
 TOOLS: list[Tool] = [
     Tool(
         name="screenshot",
-        description="Take a screenshot and save it as a PNG file. Read the returned saved_path file to see what is on screen. The image is never returned inline; only a file path reference is returned. By default the primary monitor (monitor=1) is captured; pass monitor=0 for the entire virtual desktop, or pass save_path to override the save location. Use the returned saved_path and coordinate metadata for any screenshot-based click. Do not infer click coordinates from a scaled chat preview.",
+        description="Take a screenshot and save it as a PNG file. By default only a file path reference is returned (read the returned saved_path file to see what is on screen). By default the primary monitor (monitor=1) is captured; pass monitor=0 for the entire virtual desktop, or pass save_path to override the save location. Use the returned saved_path and coordinate metadata for any screenshot-based click. Do not infer click coordinates from a scaled chat preview. Set include_image=true only on multimodal clients that render image tool results to also receive the screenshot inline (saving a separate file read); the inline image is full-resolution, so click_on_screenshot coordinates still map correctly.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -30,6 +30,11 @@ TOOLS: list[Tool] = [
                 "save_path": {
                     "type": "string",
                     "description": "If provided, save the PNG to this file path and return the path. Otherwise the PNG is saved to the configured screenshot_dir with an auto-generated timestamped name.",
+                },
+                "include_image": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "If true, also return the saved PNG inline as a full-resolution ImageContent block (in addition to saved_path), so a multimodal client need not read the file separately. Only enable on clients that render image tool results; oversized captures (e.g. monitor=0) silently fall back to path-only. Default false to keep context lean.",
                 },
             },
         },
