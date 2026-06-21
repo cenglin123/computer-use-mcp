@@ -77,6 +77,16 @@
 - - deployment.md 新增「安装 SKILL 供框架默认加载」小节:说明把 skills/computer-use/SKILL.md 复制或符号链接到 ~/.agents/skills/computer-use/SKILL.md,使支持 .agents/skills 约定的框架(codex、opencode 等)按 frontmatter description 自动加载,装好 MCP 的 agent 在任意工作目录都能拿到正确使用纪律。
 - - 给出 Windows 复制与符号链接两种命令、链接 vs 复制权衡、必须保留 frontmatter 的提醒,以及 Claude Code 用户的 ~/.claude/skills 等价路径。面向执行 MCP 安装的 agent,作为分发安装的关键步骤。
 
+### feat: 新增 save_review 工具与规范化复盘报告
+
+#### 变更内容
+- - 新增 save_review MCP 工具:用户在执行窗口说"复盘/总结复盘报告"时,agent 整理叙述,工具把规范化报告(单 .md,YAML frontmatter + 正文)写入 review_dir(默认 ~/.computer-use/reviews/),便于分发后统一收集反馈。自动附元数据(created_at/mcp_version/outcome/client/model)、doctor 环境快照(标注 captured_at)、有 task_id 时附 review_task_session 摘要与 trace artifact 路径。
+- - 约束:outcome 受控枚举(succeeded/partial/failed/unknown,非法回退 unknown);report_markdown 上限 500KB;富集失败安全降级仍落盘;有 task_id 文件名确定二次调用覆盖;报告末尾带隐私提示,不写密钥/环境变量/config。
+- - 实现独立模块 review_report.py(与只读 review.py 分层);属元操作,不受 task_id 守卫约束、不进 batch/task 嵌套白名单;config 新增 review_dir。SKILL 新增 Retrospective Reports 模板与触发流程并同步 .agents;docs api/deployment 同步。
+- - 迁移影响:纯新增,无破坏性。
+
+
+
 
 
 

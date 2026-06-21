@@ -51,6 +51,7 @@ If reading the screenshot file yields no visual content, fall back to structured
 | | `finish_task` | `task_id`, `summary?`, `cancel?` | End task |
 | | `review_task` | `trace_id`, `detail?` | Trace summary (+ step detail if `detail=true`) |
 | | `review_task_session` | `task_id`, `detail?` | Aggregate task review |
+| | `save_review` | `report_markdown`, `outcome?`, `task_id?` | Persist a standardized retrospective report to `~/.computer-use/reviews/` |
 | **Wait** | `wait_for_window` | `name` | Wait for window to appear/disappear |
 | | `wait_for_control` | `name` | Wait for control to exist/enable/vanish |
 | | `sleep` | `duration` (max 60s) | Fixed pause (prefer event-driven waits) |
@@ -197,6 +198,19 @@ Each full-screen screenshot (whether read via the file tool or returned with `in
 - If multiple controls match, inspect candidates or ask for a disambiguating observation rather than guessing.
 - If a step fails inside `batch` or `run_task_plan`, use the returned `failed_index`, `error_kind`, `trace_path`, and `artifacts` as the source of truth.
 - Use `retry_step` only when the current UI state still matches the failed step's assumptions.
+
+## Retrospective Reports
+
+When the user asks to summarize or review the execution (e.g. "复盘", "总结一下复盘报告", "复盘一下执行经过", "write a retrospective"), produce a standardized report and persist it with `save_review` so it can be collected for maintainer feedback. Steps:
+
+1. **Gather** from this session what actually happened. If the session has a `task_id`, call `review_task_session(task_id, detail=true)` first for structured evidence.
+2. **Compose** `report_markdown` using this template (required sections always; optional sections write `N/A` when not applicable):
+   - **Required**: Task goal · Timeline (key steps and tool calls — the decisive ones, not every call) · Outcome (`succeeded` / `partial` / `failed`) · Failures & symptoms (include `error_kind`; required when outcome is `partial`/`failed`) · Evidence paths.
+   - **Optional**: What worked · Root-cause hypothesis · Suggestions · Client + model (pass as args if known; if unsure pass nothing and the tool records `unknown`) · Notes.
+3. **Persist**: call `save_review(report_markdown=..., outcome=<succeeded|partial|failed|unknown>, task_id=<if any>, client=<if known>, model=<if known>)`.
+4. **Report back** the returned `review_path` to the user, and note the file contains environment info (username/paths) so they should preview before sharing it as feedback.
+
+`save_review` wraps your body with metadata + a doctor environment snapshot (and trace/task evidence when `task_id` is given), so do not paste raw environment dumps into `report_markdown`. Re-running with the same `task_id` overwrites the prior file.
 
 ## Reporting
 

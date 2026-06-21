@@ -926,6 +926,17 @@ def _dispatch_tool(
             result = _task_error(exc)
         return json.dumps(result)
 
+    if name == "save_review":
+        from computer_use import review_report
+        result = review_report.save_review(
+            report_markdown=args.get("report_markdown", ""),
+            outcome=args.get("outcome", "unknown"),
+            task_id=args.get("task_id"),
+            client=args.get("client"),
+            model=args.get("model"),
+        )
+        return json.dumps(result)
+
     if name in {
         "start_task",
         "finish_task",

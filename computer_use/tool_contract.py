@@ -39,6 +39,8 @@ ATOMIC_AND_COMPOSITE_TOOL_NAMES = (
     "review_task",
 )
 
+#: Top-level tools that are NOT valid nested steps (batch actions or task-plan
+#: steps): orchestration, task management, and meta/reporting tools.
 _ORCHESTRATION_TOOL_NAMES = frozenset(
     {
         "batch",
@@ -48,6 +50,7 @@ _ORCHESTRATION_TOOL_NAMES = frozenset(
         "get_task",
         "list_tasks",
         "review_task_session",
+        "save_review",
     }
 )
 _DIAGNOSTIC_TOOL_NAMES = frozenset({"retry_step", "review_task"})

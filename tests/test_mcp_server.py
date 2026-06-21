@@ -64,8 +64,41 @@ def test_tools_listed() -> None:
         "get_task",
         "list_tasks",
         "review_task_session",
+        "save_review",
         "batch",
     }
+
+
+def test_save_review_excluded_from_task_context() -> None:
+    # save_review is a meta/reporting tool: exempt from the missing_task_id guard
+    # and never auto-injected with task_id (like review_task / task management).
+    assert "save_review" in schemas_module._TASK_CONTEXT_EXCLUDED_TOOLS
+
+
+def test_save_review_routes_via_handler_preserving_task_id(monkeypatch, tmp_path) -> None:
+    # Production path: call_tool -> _handle_tool_call. Because save_review is in
+    # _TASK_CONTEXT_EXCLUDED_TOOLS, it dispatches without the task_id guard and,
+    # unlike the generic _call_tool path, keeps task_id for evidence enrichment.
+    import computer_use.mcp_server as server
+    import computer_use.review_report as rr
+
+    captured: dict[str, object] = {}
+
+    def fake_save(report_markdown, outcome="unknown", task_id=None, client=None, model=None):
+        captured.update(report_markdown=report_markdown, outcome=outcome, task_id=task_id)
+        return {"saved": True, "review_path": str(tmp_path / "r.md"), "review_dir": str(tmp_path)}
+
+    monkeypatch.setattr(rr, "save_review", fake_save)
+    data = json.loads(
+        server._handle_tool_call(
+            "save_review",
+            {"report_markdown": "hi", "outcome": "succeeded", "task_id": "task-keep"},
+        )
+    )
+    assert data["saved"] is True
+    assert captured["report_markdown"] == "hi"
+    assert captured["outcome"] == "succeeded"
+    assert captured["task_id"] == "task-keep"  # not stripped
 
 
 def test_schemas_module_exports_tools_and_constants() -> None:

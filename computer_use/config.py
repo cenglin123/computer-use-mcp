@@ -20,6 +20,7 @@ _DEFAULTS: dict[str, Any] = {
     "screenshot_dir": Path.home() / ".computer-use" / "screenshots",
     "trace_dir": Path.home() / ".computer-use" / "traces",
     "task_dir": Path.home() / ".computer-use" / "tasks",
+    "review_dir": Path.home() / ".computer-use" / "reviews",
     "safety": {
         "sensitive_processes": [],
         "sensitive_window_classes": [],
@@ -45,6 +46,7 @@ def _load_config(path: Path | None = None) -> dict[str, Any]:
         "screenshot_dir": _expand_user(_DEFAULTS["screenshot_dir"]),
         "trace_dir": _expand_user(_DEFAULTS["trace_dir"]),
         "task_dir": _expand_user(_DEFAULTS["task_dir"]),
+        "review_dir": _expand_user(_DEFAULTS["review_dir"]),
         "safety": dict(_DEFAULTS["safety"]),
         "display": dict(_DEFAULTS["display"]),
     }
@@ -69,6 +71,9 @@ def _load_config(path: Path | None = None) -> dict[str, Any]:
 
     if "task_dir" in data:
         config["task_dir"] = Path(_expand_user(data["task_dir"]))
+
+    if "review_dir" in data:
+        config["review_dir"] = Path(_expand_user(data["review_dir"]))
 
     safety = data.get("safety", {})
     config["safety"]["sensitive_processes"] = list(

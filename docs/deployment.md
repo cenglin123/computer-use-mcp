@@ -125,7 +125,8 @@ python tools\smoke_mcp_client.py --server .\.venv\Scripts\python.exe --args -m c
 ## 持久化与备份
 
 - 本项目无持久化数据库。截图保存到配置的 `screenshot_dir`，MCP 响应只返回本地路径，不返回 base64。
-- 新安装默认配置根目录为 `~/.computer-use/`：日志写入 `logs/`，截图写入 `screenshots/`，trace 写入 `traces/`，业务任务写入 `tasks/`。
+- 新安装默认配置根目录为 `~/.computer-use/`：日志写入 `logs/`，截图写入 `screenshots/`，trace 写入 `traces/`，业务任务写入 `tasks/`，复盘报告写入 `reviews/`。
+- **复盘报告收集**：用户在执行窗口说"复盘/总结复盘报告"时，agent 用 `save_review` 把规范化报告(单 `.md`，YAML frontmatter + 正文)写入 `review_dir`(默认 `~/.computer-use/reviews/`，可在 `config.yaml` 配置)。收集反馈时让用户把该目录下对应 `.md` 发回(聊天附件 / GitHub Issue / 邮件)。报告含 `doctor` 环境快照与用户名/路径，**不含密钥或 `config.yaml` 内容**;分享前可预览脱敏。
 - `screenshot.save_path` 只能指向 `screenshot_dir` 内已存在的父目录，不能写入任意文件系统位置。
 - 当 `safety.screenshot_sensitive_window_check` 为 `true` 时，`screenshot` 会尝试检测捕获区域内是否存在敏感进程/窗口类，命中后将整张截图替换为空白图并在响应中标记 `redacted: true`。该机制仅作为辅助保护，不能替代用户审慎选择截图范围。
 - 对于 `launch_app` 启动的应用，目标路径必须在 `safety.allowed_commands` 白名单中；否则会被拒绝并提示参考 `config.example.yaml`。敏感进程（如 KeePass、certmgr）即使在白名单中也会被额外拦截。

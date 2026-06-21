@@ -12,7 +12,7 @@ _MANIFEST_TOOL_NAMES = {"batch", "run_task_plan", "review_task"}
 _TASK_MANAGEMENT_TOOLS = frozenset(
     {"start_task", "finish_task", "get_task", "list_tasks", "review_task_session"}
 )
-_TASK_CONTEXT_EXCLUDED_TOOLS = _TASK_MANAGEMENT_TOOLS | {"review_task"}
+_TASK_CONTEXT_EXCLUDED_TOOLS = _TASK_MANAGEMENT_TOOLS | {"review_task", "save_review"}
 
 
 
@@ -591,6 +591,43 @@ TOOLS: list[Tool] = [
                 },
             },
             "required": ["task_id"],
+        },
+    ),
+    Tool(
+        name="save_review",
+        description=(
+            "Persist a standardized retrospective report as a single .md file under the configured "
+            "review_dir (~/.computer-use/reviews/) for easy feedback collection after distribution. "
+            "Call this when the user asks to summarize / write a retrospective of the execution "
+            "('复盘', 'summarize the retrospective'). You compose report_markdown (the narrative and "
+            "analysis from this session); the tool wraps it with metadata, a doctor environment "
+            "snapshot, and — when task_id is given — trace/task evidence paths, then returns review_path. "
+            "Different from review_task / review_task_session, which only READ deterministic trace "
+            "summaries; save_review WRITES a report. Re-running with the same task_id overwrites the "
+            "previous file. Report the returned review_path to the user and note the file may contain "
+            "username/paths and should be previewed before sharing."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "report_markdown": {
+                    "type": "string",
+                    "description": "The agent-composed retrospective body in markdown (max 500KB). Follow the Retrospective Reports template in the skill.",
+                },
+                "outcome": {
+                    "type": "string",
+                    "enum": ["succeeded", "partial", "failed", "unknown"],
+                    "default": "unknown",
+                    "description": "Overall task outcome, for aggregation. Invalid values fall back to 'unknown'.",
+                },
+                "task_id": {
+                    "type": "string",
+                    "description": "Optional task session ID; when set, trace/task evidence is auto-attached and the file is named deterministically (re-run overwrites).",
+                },
+                "client": {"type": "string", "description": "Optional host client name, if known."},
+                "model": {"type": "string", "description": "Optional model name, if known."},
+            },
+            "required": ["report_markdown"],
         },
     ),
     Tool(
