@@ -64,6 +64,14 @@
 - - 仅顶层单次 screenshot 内联,batch/run_task_plan 内不内联;仅 stdio 传输适用。
 - - 迁移影响:无破坏性,默认行为(纯路径)与 text-only 客户端不变。开启前提:客户端须支持渲染 ImageContent(已验证 OpenCode+Kimi 支持)。文档:SKILL/api/deployment 已调和原"绝不返回 base64"的绝对表述为带 opt-in 例外。
 
+### docs: SKILL 补充截图已确认即不复核窗口、UIA 前台=宿主自指信号
+
+#### 变更内容
+- - Standard Loop 第 2 步收紧:截图若已清楚显示目标 App,即视为在前台的确认,直接进视觉定位,不再用 get_ui_snapshot/wait_for_window/find_control 复核窗口;仅截图不清晰或不可读图时才用 UIA 辅助。
+- - Failure Handling 新增一条:get_ui_snapshot(foreground) 返回自己的宿主终端/IDE 是自指信号(与 desktop-scope find_control 自命中同类),不是矛盾;前置条件为截图已确认目标在前台,满足时不要反复换 App 名重试 wait_for_window,直接走 click_on_screenshot。
+- - 源于一轮 MiniMax-M3 原神测试:截图已显示游戏却仍 UIA 复核命中宿主终端、3 次 wait_for_window 失败、并自我总结出错误教训。纯文档纪律,已同步 .agents 副本;Get-Date 类无谓 shell 调用按评议 skip 不单列规则。
+
+
 
 
 ---
