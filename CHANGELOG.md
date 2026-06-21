@@ -71,6 +71,12 @@
 - - Failure Handling 新增一条:get_ui_snapshot(foreground) 返回自己的宿主终端/IDE 是自指信号(与 desktop-scope find_control 自命中同类),不是矛盾;前置条件为截图已确认目标在前台,满足时不要反复换 App 名重试 wait_for_window,直接走 click_on_screenshot。
 - - 源于一轮 MiniMax-M3 原神测试:截图已显示游戏却仍 UIA 复核命中宿主终端、3 次 wait_for_window 失败、并自我总结出错误教训。纯文档纪律,已同步 .agents 副本;Get-Date 类无谓 shell 调用按评议 skip 不单列规则。
 
+### docs: 部署文档补充把 SKILL 安装到用户全局 .agents/skills 供框架默认加载
+
+#### 变更内容
+- - deployment.md 新增「安装 SKILL 供框架默认加载」小节:说明把 skills/computer-use/SKILL.md 复制或符号链接到 ~/.agents/skills/computer-use/SKILL.md,使支持 .agents/skills 约定的框架(codex、opencode 等)按 frontmatter description 自动加载,装好 MCP 的 agent 在任意工作目录都能拿到正确使用纪律。
+- - 给出 Windows 复制与符号链接两种命令、链接 vs 复制权衡、必须保留 frontmatter 的提醒,以及 Claude Code 用户的 ~/.claude/skills 等价路径。面向执行 MCP 安装的 agent,作为分发安装的关键步骤。
+
 
 
 

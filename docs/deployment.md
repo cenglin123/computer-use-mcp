@@ -24,6 +24,36 @@
 - **体积**：单屏 PNG 常 1–5MB；base64 超 3MB（约 2.25MB 原始 PNG，典型见于 `monitor=0` 全虚拟桌面）会自动退化为纯路径并加 `inline_image_skipped`。
 - **粒度**：本期仅 per-call 开启（按需在 `screenshot` 调用上传参），不提供部署级全局默认。
 
+### 安装 SKILL 供框架默认加载（分发安装关键步骤）
+
+支持 `.agents/skills/` 约定的框架（如 codex、opencode）会**按 `SKILL.md` 顶部 frontmatter 的 `description` 自动发现并加载**用户全局 skills 目录下的技能。把本 MCP 的 SKILL 装到用户全局目录后，装好 MCP 的 agent 在**任意工作目录**都能拿到正确的 Computer Use 使用纪律，无需每次手动 `load skill`。**执行 MCP 安装的 agent 应在配置 server 的同时完成这一步。**
+
+- **权威源文件**：仓库内 `skills/computer-use/SKILL.md`（`.agents/skills/computer-use/SKILL.md` 是项目内同步副本，内容逐字一致，二者皆可作为源）。
+- **目标位置**：`C:\Users\<用户名>\.agents\skills\computer-use\SKILL.md`（即 `~/.agents/skills/computer-use/SKILL.md`）。
+
+复制方式（Windows PowerShell，快照式，SKILL 更新后需重新复制）：
+
+```powershell
+$dest = "$env:USERPROFILE\.agents\skills\computer-use"
+New-Item -ItemType Directory -Force $dest | Out-Null
+Copy-Item "<仓库根目录>\skills\computer-use\SKILL.md" "$dest\SKILL.md" -Force
+```
+
+链接方式（符号链接，随仓库更新自动跟随；需管理员权限或开启开发者模式）：
+
+```powershell
+$dest = "$env:USERPROFILE\.agents\skills\computer-use"
+New-Item -ItemType Directory -Force $dest | Out-Null
+New-Item -ItemType SymbolicLink -Path "$dest\SKILL.md" -Target "<仓库根目录>\skills\computer-use\SKILL.md"
+```
+
+注意：
+
+- **链接 vs 复制**：链接让全局技能始终跟随仓库内最新 SKILL；复制是快照，仓库 SKILL 更新后须重新复制。分发场景若仓库会随版本更新，优先用链接。
+- **必须保留 frontmatter**：`SKILL.md` 顶部的 `name` / `description` 不能删，框架靠 `description` 判断何时加载该技能。
+- **Claude Code 用户**：其全局技能路径是 `~/.claude/skills/computer-use/SKILL.md`，同样可复制或链接到该处。
+- 安装后可在 agent 中确认该 skill 能被按需触发，再执行真实 GUI 任务。
+
 ### 开发环境
 
 ```bash
