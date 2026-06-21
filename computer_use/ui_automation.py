@@ -478,3 +478,138 @@ def wait_for_control(
         time.sleep(poll_interval)
 
     return {"present": not exists, "timeout": True}
+
+
+def _host_process_names() -> set[str]:
+    """Return lower-cased process names in the MCP host's parent chain.
+
+    Used by ``activate_window`` to refuse self-activation: the agent's own
+    terminal/IDE host window must never be brought to the foreground.
+    """
+    names: set[str] = set()
+    try:
+        import os
+
+        import psutil
+
+        proc: Any | None = psutil.Process(os.getpid())
+        for _ in range(6):  # bounded ancestor walk
+            if proc is None:
+                break
+            try:
+                name = (proc.name() or "").lower()
+                if name:
+                    names.add(name)
+            except Exception:  # pragma: no cover
+                pass
+            try:
+                proc = proc.parent()
+            except Exception:  # pragma: no cover
+                break
+    except Exception:  # pragma: no cover
+        pass
+    return names
+
+
+def _foreground_matches(process_name: str | None) -> bool:
+    """Return True if the current foreground control belongs to ``process_name``."""
+    if not process_name:
+        return False
+    fg = _get_foreground_control()
+    if fg is None:
+        return False
+    try:
+        fg_process = _get_process_name(fg)
+    except Exception:  # pragma: no cover
+        return False
+    return bool(fg_process) and fg_process.lower() == process_name.lower()
+
+
+def activate_window(name: str) -> dict[str, Any]:
+    """Bring a window whose title contains ``name`` to the foreground.
+
+    One-shot lookup + activate; does not poll. Call ``wait_for_window`` first if
+    the window may not exist yet. The implementation:
+
+    - refuses to activate the MCP host's own window (``self_activation_blocked``),
+    - blocks sensitive processes via ``check_target_window`` (``blocked``),
+    - distinguishes windows that do not support activation (``not_activatable``),
+    - captures COM/UIPI failures (``activate_failed``),
+    - post-verifies the foreground window and flags silent cross-desktop
+      failures (``activation_unconfirmed``).
+    """
+    from computer_use.safety import SafetyError, check_target_window
+
+    if not _uia_available():
+        return {"activated": False, "uia_available": False, "reason": "uia_unavailable"}
+
+    window = _find_window_by_name(name)
+    if window is None:
+        return {"activated": False, "reason": "not_found"}
+
+    info = _control_to_info(window)
+    proc_name = (info.process_name or "").lower()
+
+    # Self-activation guard: never foreground our own host window.
+    if proc_name and proc_name in _host_process_names():
+        return {
+            "activated": False,
+            "reason": "self_activation_blocked",
+            "process_name": info.process_name,
+            "detail": "refusing to activate own host window",
+        }
+
+    # Sensitive-process guard (same mechanism as find_control).
+    try:
+        check_target_window(info.process_name, info.class_name, info.control_type)
+    except SafetyError as exc:
+        return {
+            "activated": False,
+            "reason": "blocked",
+            "process_name": info.process_name,
+            "detail": str(exc),
+        }
+
+    # Capability check: a window without the Window pattern cannot be activated;
+    # report it distinctly so callers do not retry as if it were transient.
+    if hasattr(window, "GetWindowPattern"):
+        try:
+            pattern = window.GetWindowPattern()
+        except Exception:  # pragma: no cover
+            pattern = None
+        if pattern is None:
+            return {
+                "activated": False,
+                "reason": "not_activatable",
+                "process_name": info.process_name,
+                "detail": "window does not support the Window pattern",
+            }
+
+    try:
+        window.SetActive()
+    except Exception as exc:
+        return {
+            "activated": False,
+            "reason": "activate_failed",
+            "process_name": info.process_name,
+            "detail": str(exc),
+        }
+
+    rect = (
+        {"left": info.rect[0], "top": info.rect[1], "right": info.rect[2], "bottom": info.rect[3]}
+        if info.rect is not None
+        else None
+    )
+    # SetActive may return without error yet not actually foreground (e.g. the
+    # window lives on another virtual desktop). Confirm via the foreground control.
+    confirmed = _foreground_matches(info.process_name)
+    result: dict[str, Any] = {
+        "activated": confirmed,
+        "name": info.name,
+        "process_name": info.process_name,
+        "rect": rect,
+    }
+    if not confirmed:
+        result["reason"] = "activation_unconfirmed"
+        result["detail"] = "SetActive returned but target is not the foreground window"
+    return result

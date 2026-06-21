@@ -414,3 +414,124 @@ def test_get_top_level_windows_in_rect_returns_none_on_enumeration_error() -> No
     uia_mod.uia.GetRootControl.return_value = root
 
     assert uia_mod.get_top_level_windows_in_rect((0, 0, 200, 200)) is None
+
+
+def _window_tree(window_name: str = "Genshin Impact") -> tuple[_FakeControl, _FakeControl]:
+    """Build a desktop tree with one activatable window; return (root, window)."""
+    window = _FakeControl(
+        name=window_name,
+        control_type_name="Window",
+        class_name="UnityWndClass",
+        rect=_FakeRect(0, 0, 1920, 1080),
+    )
+    window.SetActive = MagicMock()
+    window.GetWindowPattern = MagicMock(return_value=MagicMock())
+    root = _FakeControl(name="Desktop", control_type_name="Pane", children=[window])
+    return root, window
+
+
+def test_activate_window_success(monkeypatch) -> None:
+    root, window = _window_tree()
+    uia_mod.uia = MagicMock()
+    uia_mod.uia.GetRootControl.return_value = root
+    monkeypatch.setattr(uia_mod, "_get_process_name", lambda _c: "game.exe")
+    monkeypatch.setattr(uia_mod, "_host_process_names", lambda: set())
+    monkeypatch.setattr(uia_mod, "_foreground_matches", lambda _pn: True)
+
+    result = uia_mod.activate_window(name="Genshin")
+    assert result["activated"] is True
+    assert result["name"] == "Genshin Impact"
+    assert result["process_name"] == "game.exe"
+    assert result["rect"] == {"left": 0, "top": 0, "right": 1920, "bottom": 1080}
+    window.SetActive.assert_called_once()
+
+
+def test_activate_window_not_found(monkeypatch) -> None:
+    root, _ = _window_tree()
+    uia_mod.uia = MagicMock()
+    uia_mod.uia.GetRootControl.return_value = root
+
+    result = uia_mod.activate_window(name="DoesNotExist")
+    assert result == {"activated": False, "reason": "not_found"}
+
+
+def test_activate_window_uia_unavailable() -> None:
+    uia_mod.uia = None
+
+    result = uia_mod.activate_window(name="Genshin")
+    assert result["activated"] is False
+    assert result["uia_available"] is False
+    assert result["reason"] == "uia_unavailable"
+
+
+def test_activate_window_self_blocked(monkeypatch) -> None:
+    root, window = _window_tree(window_name="OC | computer-use test")
+    uia_mod.uia = MagicMock()
+    uia_mod.uia.GetRootControl.return_value = root
+    monkeypatch.setattr(uia_mod, "_get_process_name", lambda _c: "WindowsTerminal.exe")
+    monkeypatch.setattr(uia_mod, "_host_process_names", lambda: {"windowsterminal.exe"})
+
+    result = uia_mod.activate_window(name="computer-use test")
+    assert result["activated"] is False
+    assert result["reason"] == "self_activation_blocked"
+    window.SetActive.assert_not_called()
+
+
+def test_activate_window_sensitive_blocked(monkeypatch) -> None:
+    root, window = _window_tree()
+    uia_mod.uia = MagicMock()
+    uia_mod.uia.GetRootControl.return_value = root
+    monkeypatch.setattr(uia_mod, "_get_process_name", lambda _c: "game.exe")
+    monkeypatch.setattr(uia_mod, "_host_process_names", lambda: set())
+
+    def fake_check(*_args, **_kwargs):
+        raise SafetyError("sensitive window")
+
+    monkeypatch.setattr("computer_use.safety.check_target_window", fake_check)
+
+    result = uia_mod.activate_window(name="Genshin")
+    assert result["activated"] is False
+    assert result["reason"] == "blocked"
+    window.SetActive.assert_not_called()
+
+
+def test_activate_window_not_activatable(monkeypatch) -> None:
+    root, window = _window_tree()
+    window.GetWindowPattern = MagicMock(return_value=None)
+    uia_mod.uia = MagicMock()
+    uia_mod.uia.GetRootControl.return_value = root
+    monkeypatch.setattr(uia_mod, "_get_process_name", lambda _c: "game.exe")
+    monkeypatch.setattr(uia_mod, "_host_process_names", lambda: set())
+
+    result = uia_mod.activate_window(name="Genshin")
+    assert result["activated"] is False
+    assert result["reason"] == "not_activatable"
+    window.SetActive.assert_not_called()
+
+
+def test_activate_window_activate_failed(monkeypatch) -> None:
+    root, window = _window_tree()
+    window.SetActive = MagicMock(side_effect=RuntimeError("UIPI blocked"))
+    uia_mod.uia = MagicMock()
+    uia_mod.uia.GetRootControl.return_value = root
+    monkeypatch.setattr(uia_mod, "_get_process_name", lambda _c: "game.exe")
+    monkeypatch.setattr(uia_mod, "_host_process_names", lambda: set())
+
+    result = uia_mod.activate_window(name="Genshin")
+    assert result["activated"] is False
+    assert result["reason"] == "activate_failed"
+    assert "UIPI blocked" in result["detail"]
+
+
+def test_activate_window_unconfirmed(monkeypatch) -> None:
+    root, window = _window_tree()
+    uia_mod.uia = MagicMock()
+    uia_mod.uia.GetRootControl.return_value = root
+    monkeypatch.setattr(uia_mod, "_get_process_name", lambda _c: "game.exe")
+    monkeypatch.setattr(uia_mod, "_host_process_names", lambda: set())
+    monkeypatch.setattr(uia_mod, "_foreground_matches", lambda _pn: False)
+
+    result = uia_mod.activate_window(name="Genshin")
+    assert result["activated"] is False
+    assert result["reason"] == "activation_unconfirmed"
+    window.SetActive.assert_called_once()

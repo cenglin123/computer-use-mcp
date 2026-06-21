@@ -44,6 +44,18 @@
 - - docs/agent-usage.md, docs/api.md, docs/pitfalls.md: 同步翻转措辞
 - - 更新 3 个测试断言匹配新关键词
 
+### feat: 新增 activate_window 工具并加固 SKILL 防误用指引
+
+#### 变更内容
+- - 新增 `activate_window` MCP 工具：按标题把后台/最小化窗口置前台，消除模型用 shell/Win32 切窗的越界诱因。内建自指污染防御（`self_activation_blocked`）、敏感进程拦截（`blocked`）、不可激活窗口区分（`not_activatable`）、COM/UIPI 异常捕获（`activate_failed`）及前台后验（跨虚拟桌面静默失败返回 `activation_unconfirmed`）。已接入 batch/task 白名单。
+- - SKILL/`.agents` 同步加固：截图后必先读图（视觉步骤）、禁用 OCR 与 shell 探测桌面状态、desktop 域 UIA 命中先核对 `process_name` 归属以防误点 Agent 宿主窗口、放弃任务用 `finish_task(cancel=true)` 收尾。
+- - 迁移影响：无破坏性变更，纯新增工具 + 指引；客户端可直接调用 `activate_window`。
+
+### docs: SKILL 补充成排相邻控件的瞄准纪律
+
+#### 变更内容
+- - 针对工具栏/图标行这类"沿单轴密排的相似控件"场景,在 SKILL Pre-Click Verification 增补规则:按功能而非位置识别目标、裁剪收紧到单个候选、在判别轴上用 move_to + 红十字预验证后再点。源于一次原神左上角图标行执行中 x 方向反复选偏(横排布局下 y 退化为无信息轴,误差全部集中到 x)的复盘。已同步 .agents 副本。
+
 
 
 

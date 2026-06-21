@@ -48,6 +48,7 @@ def test_tools_listed() -> None:
         "inspect_point",
         "wait_for_window",
         "wait_for_control",
+        "activate_window",
         "sleep",
         "launch_app",
         "click_by_uid",

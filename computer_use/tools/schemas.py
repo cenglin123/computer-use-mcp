@@ -365,6 +365,15 @@ TOOLS: list[Tool] = [
         },
     ),
     Tool(
+        name="activate_window",
+        description="Bring an existing window whose title contains the given name to the foreground. Use this to focus a target application that is running but backgrounded or minimized, instead of shell scripts or Win32 calls. One-shot lookup + activate (no polling); call wait_for_window first if the window may not exist yet. Refuses to activate the agent's own host window (self_activation_blocked) and sensitive processes (blocked). A window on another virtual desktop may report activation_unconfirmed. Returns activated plus name, process_name, rect, or a reason on failure.",
+        inputSchema={
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        },
+    ),
+    Tool(
         name="launch_app",
         description="Launch an application by its Start Menu or Desktop shortcut name.",
         inputSchema={

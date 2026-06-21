@@ -27,6 +27,7 @@ ATOMIC_AND_COMPOSITE_TOOL_NAMES = (
     "inspect_point",
     "wait_for_window",
     "wait_for_control",
+    "activate_window",
     "launch_app",
     "sleep",
     "click_by_uid",

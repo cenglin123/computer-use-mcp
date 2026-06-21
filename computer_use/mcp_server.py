@@ -51,6 +51,7 @@ from computer_use.safety import (
     validate_text_input,
 )
 from computer_use.ui_automation import (
+    activate_window,
     find_control,
     get_top_level_windows_in_rect,
     inspect_point,
@@ -801,6 +802,10 @@ def _dispatch_tool(
             raise ValueError(f"duration must not exceed {MAX_SLEEP_DURATION} seconds, got {duration}")
         time.sleep(duration)
         return json.dumps({"slept": True, "duration": duration})
+
+    if name == "activate_window":
+        result = activate_window(name=args["name"])
+        return json.dumps(result)
 
     if name == "launch_app":
         result = launch_app(name=args["name"])

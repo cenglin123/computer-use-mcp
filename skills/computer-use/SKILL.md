@@ -19,6 +19,8 @@ If reading the screenshot file yields no visual content, fall back to structured
 
 - Treat mouse and keyboard tools as real user input. They affect the active Windows desktop.
 - Do not bypass the MCP tools with ad-hoc `pyautogui` scripts or direct calls into private implementation modules.
+- Do not use shell/PowerShell or Win32 calls to probe or change desktop state. To check whether an app is running or in the foreground use `find_control` / `get_ui_snapshot(scope="foreground")` / `wait_for_window`; to foreground it use `activate_window`. Reaching for `Get-Process`, `SetForegroundWindow`, or `Add-Type` means the right MCP tool was not used.
+- Reading the saved screenshot file **is** the vision step. This project has no OCR and needs none — do not install or call OCR (pytesseract, easyocr, etc.) and do not request a different model to "read the image" before trying to read the screenshot yourself.
 
 ## Tool Quick Reference
 
@@ -53,6 +55,7 @@ If reading the screenshot file yields no visual content, fall back to structured
 | | `wait_for_control` | `name` | Wait for control to exist/enable/vanish |
 | | `sleep` | `duration` (max 60s) | Fixed pause (prefer event-driven waits) |
 | **Launch** | `launch_app` | `name` | Start app by Start Menu / Desktop shortcut |
+| | `activate_window` | `name` | Bring an existing/backgrounded/minimized window to the foreground |
 
 > All executable tools accept optional `task_id`. After `start_task`, omitting `task_id` while an explicit task is active returns `missing_task_id`.
 
@@ -99,7 +102,7 @@ If reading the screenshot file yields no visual content, fall back to structured
 ## Standard Loop
 
 1. Establish task context with `start_task(goal=...)` when the user task may span multiple tool calls or needs auditability.
-2. Observe: call `screenshot(monitor=1)`, then **read the returned `saved_path` file** to see what is on screen. Use `get_ui_snapshot` or `find_control` for supplementary structured info.
+2. Observe: call `screenshot(monitor=1)`, then **read the returned `saved_path` file as your first action** — that read *is* the vision step. Do not jump to UIA, `find_control`, or shell probing before you have read the screenshot and confirmed the target is not visible. If the target app is running but backgrounded or minimized, use `activate_window(name=...)` to foreground it, then re-screenshot. Use `get_ui_snapshot(scope="foreground")` or `find_control` for supplementary structured info.
 3. Prefer semantic/UIA targeting over coordinates: `target_name`, `click_by_uid`, `click_by_text`, `open_menu`, or `find_control` then click. If UIA cannot see the target (common for games and custom-drawn UIs), use the screenshot-based click flow below.
 4. Fall back to coordinates only after visually confirming the screenshot and monitor bounds.
 5. Execute short sequences with `batch` to reduce round trips; keep `final_screenshot=false` unless final visual evidence is needed.
@@ -116,6 +119,8 @@ After `start_task`, every subsequent executable computer-use tool call must incl
 - Stop and re-plan on `safety_block`, `fail_safe`, `timeout`, `ui_not_found`, or `invalid_tool`; do not repeat blind clicks.
 - Use `wait_for_window` and `wait_for_control` before fixed `sleep`. Use `sleep` only for animations or apps that UIA cannot observe.
 - Never infer trace or task state by scanning global directories. Use returned `trace_path`, `artifact_root`, `artifacts`, `task_id`, and review tools.
+- **Verify window ownership before acting on a desktop-scope UIA match.** A `scope="desktop"` `find_control` / `click_by_text` search can latch onto your own host window — the terminal or IDE running this agent often has the task text in its title bar. Before clicking, check the match's `process_name`: if it belongs to the process hosting this session rather than the target app, it is a false match — re-scope to the target window or `launch_app`/`activate_window` the real app first. `activate_window` enforces this for you and returns `self_activation_blocked` if the match is your own host.
+- **Close out tasks you abandon.** If a task is blocked or you stop early, call `finish_task(task_id, cancel=true)` with the reason instead of leaving the session dangling.
 
 ## Verify Clicks with the Screenshot Cursor Marker
 
@@ -135,6 +140,12 @@ The post-click verification above confirms *where* input landed. Use this **pre-
 **Failure stop-loss rule**: if a click at a coordinate does not change the GUI state, allow at most one re-measurement from a fresh screenshot. Do NOT micro-adjust within 3-5 pixels of the same wrong coordinate - re-observe and re-estimate the target from scratch.
 
 **Custom-drawn interfaces**: when UIA can only locate the window (not the specific button), prefer a `foreground` snapshot or screenshot for positioning. Do not use `click_by_uid` to click the window center as if it were the business button.
+
+**Rows of similar adjacent controls (toolbars, icon strips)**: when the target is one of several similar controls packed along a single axis (e.g. a horizontal row of top-left icons), almost all aiming error concentrates on the axis that separates them — in a horizontal row the shared height makes `y` trivially right while `x` carries every chance of error (wrong icon *or* wrong horizontal center). Do not trust "the marker is in the row" as confirmation. Instead:
+
+1. Identify the target by its **function**, not its position in the row, and crop **tight around the single candidate** — never estimate one icon's center from a wide crop that spans several icons.
+2. Always run the `move_to` → `screenshot` pre-click check above and confirm the red marker sits on that specific icon along the discriminative axis. `click_on_screenshot` only maps your estimated pixel faithfully; a faithful map of a wrong estimate still misses.
+3. If adjacent icons are low-contrast (e.g. white glyphs over a bright background), `crop_screenshot` to enlarge and disambiguate boundaries before estimating the center.
 
 ## Screenshot-Based Click Flow (Preferred for Visual Targets)
 
