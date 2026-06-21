@@ -33,6 +33,7 @@
 11. **桌面图标坐标应读 `SysListView32`，不要目测**：Windows 桌面图标列表的精确位置可通过 `LVM_GETITEMPOSITION` 获取；目测 3840×1089 截图极易点错。一旦坐标点击后目标未出现，应立刻用 OS API 验证位置，而不是重复点击。
 12. **每个工具响应都带 `timestamp`**：便于复盘时精确计算各步骤间隔，区分系统响应时间与 Agent 思考时间。
 13. **截图坐标绑定优先于裸坐标点击**：`screenshot` 写入 sidecar JSON（`<saved_path>.json`）记录 `capture_left`/`capture_top`/`coordinate_space`；Agent 应优先使用 `click_on_screenshot(screenshot_path, image_x, image_y)` 而非从缩放聊天预览估算裸 `click(x, y)`。小目标先用 `crop_screenshot` 裁剪放大（裁剪图继承坐标偏移）。映射后仍走完整安全链，副屏坐标被 `SafetyError` 拒绝。
+14. **SKILL 文案不要让 agent 自判模态**：SKILL/guidance 中反复出现 "text-only models should..." 会导致多模态模型自我怀疑、拒绝读图。正确做法是直接告诉 agent "读 saved_path 文件看界面"，仅在读取失败时才回退 UIA。不要让 agent 自问"我是不是 text-only"。
 
 ## 参考文件
 

@@ -178,5 +178,5 @@ Large screenshots, UIA JSON, and base64 image data accumulate in context and deg
 ## Reporting
 
 - Report what was done, the final observed state, and the trace/task evidence path when available.
-- Mention any limitations that affected reliability, such as text-only model use, remote-control interference, mixed DPI, inaccessible UIA controls, or blocked target windows.
+- Mention any limitations that affected reliability, such as inability to read screenshots, remote-control interference, mixed DPI, inaccessible UIA controls, or blocked target windows.
 - Do not include screenshot base64 in responses; reference saved local paths returned by the MCP tools.
