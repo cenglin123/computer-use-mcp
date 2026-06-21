@@ -116,8 +116,7 @@
 | # | 测试项 | 命令 | 预期结果 | 验收方式 |
 |---|--------|------|----------|----------|
 | 10.1 | pytest 全绿 | `python -m pytest tests/ -v` | 所有测试通过 | 检查输出 |
-| 10.2 | 测试任务脚本 | `python test_task.py` | 正常执行，截图保存到 logs | 检查文件 |
-| 10.3 | 总结任务脚本 | `python write_summary.py` | 桌面只生成 txt，截图在 logs | 检查目录 |
+| 10.2 | 端到端 smoke 脚本 | `python tools/manual_smoke_task.py` | 正常执行，截图保存到 logs | 检查文件 |
 
 ## 11. 业务任务会话审计
 

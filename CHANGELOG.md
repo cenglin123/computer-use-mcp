@@ -92,6 +92,22 @@
 - - 新增 scripts/sync_global_skill.py:把仓库 skills/computer-use/SKILL.md 复制到 ~/.agents/skills/computer-use/SKILL.md;仅当 ~/.claude/skills/computer-use/SKILL.md 已存在时一并更新(不新建,避免擅自在 Claude Code 全局启用该 skill)。SKILL 变更后跑一次即可。
 - - deployment.md 更新安装/再同步说明,并指明全局副本不受 test_skill_copies_are_identical 约束。
 
+### chore: 整理根目录散落脚本
+
+#### 变更内容
+- - test_task.py 移到 tools/manual_smoke_task.py(与 smoke_mcp_client.py 同列;改名去掉 test_ 前缀,避免 pytest 误收集这个 main() 脚本)。
+- - 删除 write_summary.py:名不副实的一次性 demo 残留(docstring 称"截图并总结",实则写死一段 B站视频总结),无复用价值。
+- - 删除 stray 日志 node_mcp_test.log(已被 .gitignore 忽略)。
+- - 更新 tests/manual_test_checklist.md:10.2 改指向新路径,移除引用已删脚本的 10.3。根目录不再有散落脚本。
+
+### docs: 新增"文件落位"硬约束防止脚本散落
+
+#### 变更内容
+- - AGENTS.md 硬约束新增「文件落位」:新增文件按用途归位(维护脚本→scripts/、可执行调试/烟雾脚本→tools/、测试→tests/(手动→tests/manual/)、文档→docs/),一次性/临时脚本用完即删或放仓库外不提交,根目录只留约定俗成的工程文件。已用 agent_links repair --force 同步到 CLAUDE.md/GEMINI.md。
+- - 动因:此前根目录散落 test_task.py/write_summary.py 等;无规则时 agent 会乱放,故立为硬约束。
+
+
+
 
 
 

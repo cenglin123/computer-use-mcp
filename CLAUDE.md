@@ -55,6 +55,7 @@
 ### 硬约束（不可违反）
 
 - **不碰构建产物**：`.venv/`、`__pycache__/`、`.pytest_cache/`、`*.egg-info/`、`dist/`、`build/` 是生成物，非任务要求不修改。
+- **文件落位**：新增文件按用途归位，不堆在仓库根目录。维护脚本（同步、审计、changelog 等）→ `scripts/`；可执行调试/烟雾脚本（手动 smoke、客户端 demo）→ `tools/`；测试 → `tests/`（需真实桌面的手动测试放 `tests/manual/`）；文档 → `docs/`。**一次性/临时脚本用完即删，或放仓库外的临时目录，不要提交。** 根目录只保留约定俗成的工程文件（`README.md`、`AGENTS.md`/`CLAUDE.md`/`GEMINI.md`、`STRUCTURE.md`、`pyproject.toml`、`config*.yaml`、`requirements.txt`、`pytest.ini` 等）。
 - **密钥不入库**：只放环境变量或 `.env`，不硬编码。
 - **输入设备安全**：`computer_use/core.py` 直接控制真实鼠标/键盘。任何改动必须通过 `safety.py` 的坐标检查和目标窗口检查，禁止绕过。
 - **不绕过 hook**：`.githooks/pre-commit` 启用时，lint 或同步检查失败先修复，不要用 `--no-verify` 跳过。
