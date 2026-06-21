@@ -26,7 +26,7 @@ def test_docs_reference_mcp_prompt_name() -> None:
     )
 
     assert "computer_use_guidance" in docs
-    assert "multimodal" in docs.lower() or "多模态" in docs
+    assert "saved_path" in docs or "读取" in docs or "read" in docs.lower()
     assert "doctor" in docs
 
 

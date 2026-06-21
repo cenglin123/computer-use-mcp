@@ -2620,8 +2620,8 @@ def test_fail_safe_returns_structured_error_and_trace(
 def test_distribution_critical_tool_descriptions_include_usage_guidance() -> None:
     by_name = {tool.name: tool for tool in TOOLS}
 
-    assert "multimodal" in by_name["screenshot"].description.lower()
-    assert "text-only" in by_name["screenshot"].description.lower()
+    assert "saved_path" in by_name["screenshot"].description.lower()
+    assert "read the returned" in by_name["screenshot"].description.lower()
     assert "real" in by_name["click"].description.lower()
     assert "observe" in by_name["batch"].description.lower()
     assert "task_id" in by_name["start_task"].description

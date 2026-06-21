@@ -1,6 +1,6 @@
 ---
 name: computer-use
-description: Use when an agent needs to control a Windows GUI through Computer Use MCP/CU with screenshots, UI Automation, mouse, keyboard, batch actions, task sessions, or trace review. Requires a multimodal model or client-side image reading for visual GUI tasks; text-only models should use only structured UIA, task, trace, and audit tools.
+description: Use when an agent needs to control a Windows GUI through Computer Use MCP with screenshots, UI Automation, mouse, keyboard, batch actions, task sessions, or trace review. The screenshot tool saves PNG files locally and returns the file path — read the saved file to visually identify UI elements and their pixel positions.
 ---
 
 # Computer Use MCP
@@ -9,10 +9,14 @@ Use this skill to operate Windows desktop applications through the `computer-use
 
 If the MCP client supports prompts, also load `computer_use_guidance`; it is the protocol-level guidance entrypoint for clients that do not support Skills.
 
+## How to See the Screen
+
+The `screenshot` tool saves a PNG to disk and returns `saved_path`. **Read the saved file** to see what is on the desktop — this is how you observe the GUI. The screenshot also includes coordinate metadata for precise clicking (see Screenshot-Based Click Flow below).
+
+If reading the screenshot file yields no visual content, fall back to structured tools: `get_ui_snapshot`, `find_control`, `click_by_text`. Do not give up on a visual task just because UIA cannot see the target — most game and custom-drawn UIs are invisible to UIA but clearly visible in screenshots.
+
 ## Capability Boundary
 
-- Use a multimodal model, or a client that can open local PNG files, for visual GUI tasks.
-- Do not attempt screenshot-based positioning with a text-only model. Text-only models may use structured tools such as `get_monitors`, `find_control`, `get_ui_snapshot`, `review_task`, and task session review.
 - Treat mouse and keyboard tools as real user input. They affect the active Windows desktop.
 - Do not bypass the MCP tools with ad-hoc `pyautogui` scripts or direct calls into private implementation modules.
 
@@ -95,8 +99,8 @@ If the MCP client supports prompts, also load `computer_use_guidance`; it is the
 ## Standard Loop
 
 1. Establish task context with `start_task(goal=...)` when the user task may span multiple tool calls or needs auditability.
-2. Observe first with `screenshot`, `get_ui_snapshot`, `find_control`, `wait_for_window`, or `wait_for_control`.
-3. Prefer semantic/UIA targeting over coordinates: `target_name`, `click_by_uid`, `click_by_text`, `open_menu`, or `find_control` then click.
+2. Observe: call `screenshot(monitor=1)`, then **read the returned `saved_path` file** to see what is on screen. Use `get_ui_snapshot` or `find_control` for supplementary structured info.
+3. Prefer semantic/UIA targeting over coordinates: `target_name`, `click_by_uid`, `click_by_text`, `open_menu`, or `find_control` then click. If UIA cannot see the target (common for games and custom-drawn UIs), use the screenshot-based click flow below.
 4. Fall back to coordinates only after visually confirming the screenshot and monitor bounds.
 5. Execute short sequences with `batch` to reduce round trips; keep `final_screenshot=false` unless final visual evidence is needed.
 6. Verify after action with a fresh screenshot, UI snapshot, control query, or task review.

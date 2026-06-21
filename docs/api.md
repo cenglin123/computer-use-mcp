@@ -15,12 +15,12 @@ MCP prompts 是分发层指导，用于让客户端安装 server 后直接发现
 
 - `computer_use_guidance`：完整 Windows GUI 操作纪律，包含多模态要求、标准闭环、安全规则和 trace/task 证据规则。
 - `computer_use_visual_task`：面向多模态模型的视觉 GUI 任务闭环。
-- `computer_use_text_only_limits`：面向纯文本模型的限制说明，只允许结构化 UIA、task、trace 和审计工具。
+- `computer_use_text_only_limits`：图像读取不可用时的回退指导，只使用结构化 UIA、task、trace 和审计工具。
 - `computer_use_safety_checklist`：发送真实鼠标/键盘输入前的安全检查清单。
 
 ## 视觉理解工作流
 
-完整 GUI 自动化依赖多模态模型或客户端侧图片读取能力。`screenshot` 只返回本地 PNG 路径，纯文本模型无法理解截图内容，因此只能使用 UIA 结构化查询、任务审计等非视觉工具；凡是需要“看图定位”的任务都应由能读取图片的模型执行。
+screenshot 保存 PNG 到本地并返回路径。读取该文件即可观察界面布局、图标、颜色和空间位置——这是 GUI 任务的主要观察手段。如果读取截图后确实无法获得视觉内容，才回退到 UIA 结构化查询或任务审计工具。
 
 推荐的 GUI 任务模式是**先看图、再定位、再执行**：
 

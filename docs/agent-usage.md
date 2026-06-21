@@ -4,10 +4,10 @@
 
 ## 能力边界
 
-- 视觉 GUI 自动化需要多模态模型，或客户端具备读取本地 PNG 截图的能力。
-- 纯文本模型不能可靠完成“看截图定位并点击”的任务，只适合使用 UIA 结构化查询、任务会话、trace 复盘和审计工具。
+- 视觉 GUI 自动化需要读取本地 PNG 截图文件的能力。`screenshot` 工具保存 PNG 并返回路径，读取该文件即可观察界面。
+- 如果读取截图后无法获得视觉内容（如确实不具备图像理解能力），才回退到 UIA 结构化查询、任务会话、trace 复盘和审计工具。
 - MCP 工具会操作真实 Windows 鼠标和键盘，执行前必须确认目标窗口、坐标和安全边界。
-- 安装后先运行 `python -m computer_use doctor`，再做只读 smoke；不要把安装成功等同于模型具备看图能力。
+- 安装后先运行 `python -m computer_use doctor`，再做只读 smoke。
 
 ## 推荐提示词
 
@@ -15,11 +15,11 @@
 You have access to the local Computer Use MCP server for Windows GUI automation.
 
 Use it only when the task requires observing or controlling the Windows desktop.
-For visual GUI tasks, you must be able to read local PNG screenshots returned by the screenshot tool. If you are a text-only model, do not attempt screenshot-based clicking; use only structured UIA, task, trace, and audit tools.
+For visual GUI tasks, read the saved screenshot PNG to see the screen. If you cannot interpret image content after reading, use structured UIA tools as fallback.
 
 Operate with this loop:
 1. Start a task session with start_task when the task needs auditability.
-2. Observe before acting with screenshot, get_ui_snapshot, find_control, wait_for_window, or wait_for_control.
+2. Observe: call screenshot(monitor=1), then read the saved file to see what is on screen. Use get_ui_snapshot or find_control for supplementary info.
 3. Prefer UIA/semantic targeting over raw coordinates.
 4. Use coordinates only after confirming the screenshot and monitor bounds.
 5. Use batch for short mechanical action sequences.

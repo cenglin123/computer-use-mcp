@@ -83,17 +83,17 @@
 - 上层多模态模型可直接读取 `screenshot` 返回的截图，自行估算坐标并调用 `click(x, y)` 等原子工具。
 - 对高频自定义绘制应用，可在 `docs/plans/` 中记录“视觉坐标 → 实际动作”映射表。
 
-## 安装 MCP 不等于模型具备看图能力
+## Agent 未读取截图文件就放弃视觉任务
 
-**现象**：用户注册 MCP 后，让纯文本模型根据截图点击按钮，Agent 却无法判断界面布局或坐标。
+**现象**：Agent 调用 `screenshot` 后，没有读取返回的 `saved_path` 文件，就声称"无法看图"并放弃视觉定位。即使 Agent 本身具备图像理解能力，也可能因为误判自己为"纯文本模型"而不读图。
 
-**原因**：MCP 只返回本地 PNG 路径，不内置视觉模型，也不把截图 base64 放入上下文。客户端和模型必须能读取本地图片，才能完成视觉 GUI 任务。
+**原因**：`screenshot` 保存 PNG 到本地并返回路径引用。Agent 必须主动读取该文件才能看到界面内容。如果 Agent 跳过读取步骤，或因安全机制自判为"无图像能力"，就会错误地放弃视觉任务。
 
 **解决**：
-- 安装后先运行 `python -m computer_use doctor`，确认能力边界提醒。
-- 支持 MCP prompts 的客户端加载 `computer_use_guidance`。
-- 不支持 prompts/Skill 时，复制 `docs/agent-usage.md` 或 `.agents/examples/clients/agent-prompt.md` 到客户端提示词。
-- 纯文本模型只使用 `get_ui_snapshot`、`find_control`、task/trace 审计等结构化工具；需要看图定位时切换到多模态模型。
+- `screenshot` 返回 `saved_path` 后，**始终先读取该文件**再决定是否能完成视觉任务。
+- 如果读取后确实无法解析图像内容（如客户端不支持图像读取），才回退到 `get_ui_snapshot`、`find_control` 等 UIA 结构化工具。
+- 不要在未尝试读取截图的情况下就放弃视觉任务——大多数游戏和自绘 UI 在 UIA 中不可见，但在截图中清晰可见。
+- 安装后先运行 `python -m computer_use doctor`，确认能力。
 
 ## Nested 工具名不是 MCP 外部名称
 

@@ -31,6 +31,20 @@
 - - 更新 STRUCTURE.md、docs/agent-usage.md、docs/audit-checklist.md、docs/deployment.md、docs/pitfalls.md、scripts/audit.py 中的路径引用
 - - agent_links.py 同步 AGENTS/CLAUDE/GEMINI 三件套
 
+### fix: 翻转 SKILL/guidance 默认行为，防止多模态模型误判为 text-only
+
+#### 变更内容
+- 问题：多模态模型读取 SKILL 后反复看到'text-only models should...'文案，开始自我怀疑并拒绝读图，导致视觉 GUI 任务失败。
+- 修复：将所有文案从'先自判是否 text-only'翻转为'直接读截图文件'：
+- - SKILL.md: 新增 How to See the Screen 节，明确指引 read saved_path
+- - guidance.py _CORE_BOUNDARY: 从'requires multimodal model'改为'read saved file'
+- - guidance.py _STANDARD_LOOP step 2: 明确'read the returned saved_path file'
+- - guidance.py text_only_limits prompt: 从'you are text-only'改为'if reading yields no content'
+- - schemas.py screenshot description: 删除'requires multimodal model'，改为'read the returned saved_path'
+- - docs/agent-usage.md, docs/api.md, docs/pitfalls.md: 同步翻转措辞
+- - 更新 3 个测试断言匹配新关键词
+
+
 
 
 ---

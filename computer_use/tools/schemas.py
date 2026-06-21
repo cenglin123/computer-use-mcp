@@ -19,7 +19,7 @@ _TASK_CONTEXT_EXCLUDED_TOOLS = _TASK_MANAGEMENT_TOOLS | {"review_task"}
 TOOLS: list[Tool] = [
     Tool(
         name="screenshot",
-        description="Take a screenshot and save it as a PNG file. The image itself is never returned in the context; only a file path reference is returned. Requires a multimodal model or client image reader; text-only models cannot interpret the PNG path. By default the primary monitor (monitor=1) is captured; pass monitor=0 for the entire virtual desktop, or pass save_path to override the save location. Use the returned saved_path and coordinate metadata for any screenshot-based click. Do not infer click coordinates from a scaled chat preview.",
+        description="Take a screenshot and save it as a PNG file. Read the returned saved_path file to see what is on screen. The image is never returned inline; only a file path reference is returned. By default the primary monitor (monitor=1) is captured; pass monitor=0 for the entire virtual desktop, or pass save_path to override the save location. Use the returned saved_path and coordinate metadata for any screenshot-based click. Do not infer click coordinates from a scaled chat preview.",
         inputSchema={
             "type": "object",
             "properties": {

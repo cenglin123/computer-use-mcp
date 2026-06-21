@@ -15,15 +15,15 @@ class GuidancePrompt:
 
 _CORE_BOUNDARY = """Computer Use MCP controls the real Windows desktop.
 
-Visual GUI tasks require a multimodal model or a client that can open local PNG screenshots returned by the screenshot tool. A text-only model must not attempt screenshot-based clicking; it may use structured UIA, task, trace, and audit tools.
+The screenshot tool saves a PNG to disk and returns saved_path. Read the saved file to see what is on the screen — this is your primary way to observe the GUI. If reading yields no visual content, fall back to structured UIA tools (get_ui_snapshot, find_control, click_by_text). Do not assume a visual task is impossible just because UIA cannot see the target.
 
 Do not bypass MCP safety with ad-hoc pyautogui scripts or private implementation imports.
 """
 
 _STANDARD_LOOP = """Operate with this loop:
 1. Use start_task(goal=...) for auditable user tasks.
-2. Observe before acting with screenshot, get_ui_snapshot, find_control, wait_for_window, or wait_for_control.
-3. Prefer UIA/semantic targeting over raw coordinates.
+2. Observe: call screenshot(monitor=1), then read the returned saved_path file to see what is on screen. Use get_ui_snapshot or find_control for supplementary structured info.
+3. Prefer UIA/semantic targeting over raw coordinates. If UIA cannot see the target (common for games and custom-drawn UIs), use the screenshot-based click flow.
 4. Use coordinates only after confirming screenshot pixels and monitor bounds.
 5. Use batch for short mechanical sequences.
 6. Verify after each meaningful state change; when using coordinate-based input, take a fresh screenshot and check the red cursor marker to confirm the click landed where intended.
@@ -75,22 +75,24 @@ PROMPTS: tuple[GuidancePrompt, ...] = (
         name="computer_use_visual_task",
         title="Computer Use visual GUI task loop",
         description=(
-            "Use for multimodal agents performing screenshot-based Windows "
-            "GUI tasks."
+            "Screenshot-based Windows GUI task guidance. Use when "
+            "performing visual GUI operations."
         ),
         text=f"{_CORE_BOUNDARY}\n{_STANDARD_LOOP}\n{_COORDINATE_VERIFY}\n{_COORDINATE_SAFETY}\n{_CONTEXT_BUDGET}",
     ),
     GuidancePrompt(
         name="computer_use_text_only_limits",
-        title="Computer Use text-only model limits",
-        description="Use when the current model cannot inspect screenshots.",
+        title="Computer Use fallback without image reading",
+        description="Use only when the agent confirmed it cannot read screenshot files.",
         text=(
-            "If you are a text-only model, do not attempt screenshot-based "
-            "clicking. Use get_monitors, get_ui_snapshot, find_control, "
-            "wait_for_window, wait_for_control, start_task, finish_task, "
-            "review_task, list_tasks, get_task, and review_task_session. "
-            "Ask for a multimodal model when a task requires visual layout, "
-            "icons, colors, or coordinate selection from a screenshot."
+            "If reading a saved screenshot file yields no visual content, "
+            "do not attempt visual coordinate clicking. Use get_monitors, "
+            "get_ui_snapshot, find_control, wait_for_window, "
+            "wait_for_control, start_task, finish_task, review_task, "
+            "list_tasks, get_task, and review_task_session. Ask the user "
+            "to switch to a client/model with image reading capability "
+            "when a task requires visual layout, icons, colors, or "
+            "coordinate selection from a screenshot."
         ),
     ),
     GuidancePrompt(
@@ -102,8 +104,8 @@ PROMPTS: tuple[GuidancePrompt, ...] = (
 )
 
 MODEL_CAPABILITY_WARNING: str = (
-    "Visual GUI tasks require a multimodal model or a client that can read "
-    "local PNG screenshots."
+    "After screenshot saves a PNG, read the saved file to see the screen. "
+    "If you cannot interpret image content, use structured UIA tools instead."
 )
 
 DOCTOR_NEXT_STEPS: tuple[str, ...] = (
