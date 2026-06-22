@@ -34,6 +34,7 @@ from computer_use.core import (
     DEFAULT_MOVE_DURATION,
     CoordinateSystem,
     click,
+    compress_for_inline,
     double_click,
     drag,
     get_coordinate_system,
@@ -1730,21 +1731,44 @@ def _handle_tool_call(name: str, arguments: dict) -> str:
 #: Larger screenshots (e.g. monitor=0 virtual desktop) silently fall back to
 #: path-only so a multi-MB payload never floods the transport.
 MAX_INLINE_IMAGE_BASE64_BYTES = 3_000_000
-#: Raw PNG byte budget that, after base64's ~4/3 inflation, stays under the cap.
+#: Retained for documentary reference; the inline pipeline now compresses to JPEG
+#: before the base64-size gate, so the raw-PNG-based ratio no longer applies.
 _MAX_INLINE_IMAGE_RAW_BYTES = MAX_INLINE_IMAGE_BASE64_BYTES * 3 // 4
 
+# Loose file-size guard: refuse to load >50MB PNG into memory for compression.
+# Typical monitor=1 screenshot: 2-5 MB PNG. Virtual desktop (3×4K): ~75 MB.
+_MAX_INLINE_FILE_SIZE = 50_000_000
 
-def _encode_png_base64(path: Path) -> str:
-    return base64.b64encode(path.read_bytes()).decode("ascii")
+
+def _encode_inline_image(path: Path, config: dict[str, Any]) -> tuple[str, str]:
+    """Read saved screenshot, compress for inline, return (base64_str, mime_type).
+
+    The on-disk file is never modified — compression happens in memory only.
+
+    Raises ValueError if the file exceeds _MAX_INLINE_FILE_SIZE (defense against
+    loading monster virtual-desktop captures into memory; caller degrades to
+    path-only on any exception).
+    """
+    if path.stat().st_size > _MAX_INLINE_FILE_SIZE:
+        raise ValueError(f"File too large for inline compression: {path.stat().st_size} bytes")
+
+    img = PILImage.open(path)
+    raw, mime = compress_for_inline(
+        img,
+        max_width=config["image"]["inline"]["max_width"],
+        jpeg_quality=config["image"]["inline"]["jpeg_quality"],
+    )
+    return base64.b64encode(raw).decode("ascii"), mime
 
 
 async def _screenshot_result_content(result_text: str) -> list[TextContent | ImageContent]:
     """Augment a screenshot result with an inline ImageContent block.
 
-    Reads the saved PNG and appends it as a proper MCP ImageContent (never as
-    base64 inside the JSON text). Any problem — unparseable result, error
-    result, missing file, oversized payload, or read failure — degrades safely
-    to a path-only TextContent so inlining can never break the main result.
+    Reads the saved PNG, compresses it to JPEG for inline transmission, and
+    returns it as a proper MCP ImageContent (never as base64 inside the JSON
+    text).  Any problem — unparseable result, error result, missing file,
+    oversized payload, or read failure — degrades safely to a path-only
+    TextContent so inlining can never break the main result.
     """
     try:
         data = json.loads(result_text)
@@ -1758,27 +1782,24 @@ async def _screenshot_result_content(result_text: str) -> list[TextContent | Ima
         return [TextContent(type="text", text=result_text)]
 
     path = Path(saved_path)
-    try:
-        raw_size = path.stat().st_size
-    except OSError:
-        data["inline_image"] = False
-        return [TextContent(type="text", text=json.dumps(data))]
-
-    if raw_size > _MAX_INLINE_IMAGE_RAW_BYTES:
-        data["inline_image_skipped"] = "payload_too_large"
-        return [TextContent(type="text", text=json.dumps(data))]
 
     try:
-        encoded = await asyncio.to_thread(_encode_png_base64, path)
+        cfg = load_config()
+        encoded, mime_type = await asyncio.to_thread(_encode_inline_image, path, cfg)
     except Exception as exc:
         logging.warning("inline screenshot encode failed: %s", exc)
         data["inline_image"] = False
         return [TextContent(type="text", text=json.dumps(data))]
 
+    if len(encoded) > MAX_INLINE_IMAGE_BASE64_BYTES:
+        data["inline_image_skipped"] = "payload_too_large"
+        return [TextContent(type="text", text=json.dumps(data))]
+
     data["inline_image"] = True
+    data["inline_mime_type"] = mime_type
     return [
         TextContent(type="text", text=json.dumps(data)),
-        ImageContent(type="image", data=encoded, mimeType="image/png"),
+        ImageContent(type="image", data=encoded, mimeType=mime_type),
     ]
 
 

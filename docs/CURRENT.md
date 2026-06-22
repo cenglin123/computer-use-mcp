@@ -5,4 +5,6 @@
 
 ## 当前任务
 
-已完成本轮四大计划（运行时白名单 / 裁剪标注 / 统一视觉标注 / SAP 快速路径），治理文档已同步。下一步：等待新需求。
+无（Screenshot 内联压缩已完成）。
+
+最近完成：`docs/plans/active/2026-06-22-screenshot-compression.md` → 已执行完毕。

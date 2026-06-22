@@ -33,3 +33,17 @@ display:
   # Default monitor for screenshot when no monitor argument is provided.
   # 1 = primary monitor (default). 0 = entire virtual desktop, 2+ = secondary.
   default_monitor: 1
+
+image:
+  # Settings for inline images (returned when include_image=true).
+  # The on-disk saved screenshot is always full-resolution PNG.
+  inline:
+    # Maximum width in pixels. Wider screenshots are proportionally
+    # resized. Set to 0 to disable resizing (keep original dimensions).
+    # Default: 1600
+    max_width: 1600
+
+    # JPEG quality for inline images (1-100). Higher = better quality + larger.
+    # UI screenshots are perfectly readable at 70-85.
+    # Default: 75
+    jpeg_quality: 75

@@ -492,3 +492,93 @@ def test_public_current_cursor_input_primitives_reject_secondary_monitor(
         invoke()
 
     assert calls == []
+
+
+# ── compress_for_inline ────────────────────────────────────────────────
+
+def test_compress_for_inline_resizes_wide_image():
+    """Image wider than max_width is proportionally resized."""
+    from PIL import Image
+    import io
+
+    img = Image.new("RGB", (2560, 1440), color=(100, 150, 200))
+    raw, mime = core.compress_for_inline(img, max_width=1280, jpeg_quality=75)
+
+    assert mime == "image/jpeg"
+    result = Image.open(io.BytesIO(raw))
+    assert result.width == 1280
+    assert result.height == 720  # 1440 * (1280/2560)
+
+
+def test_compress_for_inline_keeps_narrow_image():
+    """Image narrower than max_width is NOT resized."""
+    from PIL import Image
+    import io
+
+    img = Image.new("RGB", (800, 600), color=(100, 150, 200))
+    raw, mime = core.compress_for_inline(img, max_width=1600, jpeg_quality=75)
+
+    result = Image.open(io.BytesIO(raw))
+    assert result.width == 800
+    assert result.height == 600
+
+
+def test_compress_for_inline_max_width_zero_disables_resize():
+    """max_width=0 keeps original dimensions."""
+    from PIL import Image
+    import io
+
+    img = Image.new("RGB", (2560, 1440), color=(100, 150, 200))
+    raw, mime = core.compress_for_inline(img, max_width=0, jpeg_quality=75)
+
+    result = Image.open(io.BytesIO(raw))
+    assert result.width == 2560
+    assert result.height == 1440
+
+
+def test_compress_for_inline_jpeg_smaller_than_raw():
+    """JPEG output is smaller than raw RGB pixel buffer."""
+    from PIL import Image
+
+    img = Image.new("RGB", (1920, 1080), color=(100, 150, 200))
+    raw, mime = core.compress_for_inline(img, max_width=1600, jpeg_quality=75)
+
+    assert len(raw) < 500_000
+    assert mime == "image/jpeg"
+
+
+def test_compress_for_inline_rgba_to_rgb():
+    """RGBA images are converted to RGB for JPEG encoding."""
+    from PIL import Image
+    import io
+
+    img = Image.new("RGBA", (800, 600), color=(100, 150, 200, 255))
+    raw, mime = core.compress_for_inline(img, max_width=1600, jpeg_quality=75)
+
+    result = Image.open(io.BytesIO(raw))
+    assert result.mode == "RGB"
+    assert result.width == 800
+
+
+def test_compress_for_inline_exact_width_boundary():
+    """Image width equal to max_width is NOT resized."""
+    from PIL import Image
+    import io
+
+    img = Image.new("RGB", (1600, 900), color=(100, 150, 200))
+    raw, mime = core.compress_for_inline(img, max_width=1600, jpeg_quality=75)
+
+    result = Image.open(io.BytesIO(raw))
+    assert result.width == 1600
+    assert result.height == 900
+
+
+def test_compress_for_inline_tiny_image():
+    """1x1 image passes through without error."""
+    from PIL import Image
+
+    img = Image.new("RGB", (1, 1), color=(255, 0, 0))
+    raw, mime = core.compress_for_inline(img, max_width=1600, jpeg_quality=75)
+
+    assert mime == "image/jpeg"
+    assert len(raw) > 0

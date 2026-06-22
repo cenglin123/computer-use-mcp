@@ -340,6 +340,34 @@ def save_redacted_image(path: str | Path, width: int, height: int) -> Path:
     return dest
 
 
+def compress_for_inline(
+    pil_img: Image.Image,
+    *,
+    max_width: int = 1600,
+    jpeg_quality: int = 75,
+) -> tuple[bytes, str]:
+    """Compress a screenshot for inline transmission to the MCP client.
+
+    Resizes proportionally if wider than *max_width*, then encodes as JPEG.
+    Returns ``(raw_bytes, mime_type)``.  The caller is responsible for
+    base64-encoding the returned bytes and wrapping them in an
+    ``ImageContent`` block.
+
+    The on-disk saved file is *never* compressed — this function is only for
+    the inline variant that accompanies ``include_image=true``.
+    """
+    img = pil_img.copy()
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    if max_width > 0 and img.width > max_width:
+        ratio = max_width / img.width
+        new_h = max(int(img.height * ratio), 1)
+        img = img.resize((max_width, new_h), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=jpeg_quality, optimize=True)
+    return buf.getvalue(), "image/jpeg"
+
+
 def validate_duration(duration: float) -> float:
     """Validate that *duration* is a non-negative finite number.
 

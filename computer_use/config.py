@@ -45,6 +45,12 @@ _DEFAULTS: dict[str, Any] = {
     "display": {
         "default_monitor": 1,
     },
+    "image": {
+        "inline": {
+            "max_width": 1600,
+            "jpeg_quality": 75,
+        },
+    },
 }
 
 
@@ -64,6 +70,7 @@ def _load_config(path: Path | None = None) -> dict[str, Any]:
         "review_dir": _expand_user(_DEFAULTS["review_dir"]),
         "safety": dict(_DEFAULTS["safety"]),
         "display": dict(_DEFAULTS["display"]),
+        "image": dict(_DEFAULTS["image"]),
     }
 
     if not path.exists():
@@ -108,6 +115,17 @@ def _load_config(path: Path | None = None) -> dict[str, Any]:
     config["display"]["default_monitor"] = int(
         display.get("default_monitor", _DEFAULTS["display"]["default_monitor"])
     )
+
+    image = data.get("image", {})
+    inline_cfg = image.get("inline", {})
+    config["image"]["inline"] = {
+        "max_width": int(
+            inline_cfg.get("max_width", _DEFAULTS["image"]["inline"]["max_width"])
+        ),
+        "jpeg_quality": int(
+            inline_cfg.get("jpeg_quality", _DEFAULTS["image"]["inline"]["jpeg_quality"])
+        ),
+    }
 
     return config
 

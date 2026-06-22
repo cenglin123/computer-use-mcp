@@ -157,11 +157,13 @@ def _png_result(path: Path, extra: dict | None = None) -> str:
 def test_screenshot_inline_appends_full_image(tmp_path) -> None:
     import asyncio
     import base64
+    import io
     import computer_use.mcp_server as server
+    from PIL import Image
 
     png = tmp_path / "shot.png"
-    raw = b"\x89PNG\r\n\x1a\n fake png bytes"
-    png.write_bytes(raw)
+    img = Image.new("RGB", (400, 300), color=(100, 200, 50))
+    img.save(png, format="PNG")
 
     content = asyncio.run(server._screenshot_result_content(_png_result(png)))
 
@@ -170,8 +172,12 @@ def test_screenshot_inline_appends_full_image(tmp_path) -> None:
     assert text.type == "text"
     assert json.loads(text.text)["inline_image"] is True
     assert image.type == "image"
-    assert image.mimeType == "image/png"
-    assert base64.b64decode(image.data) == raw
+    assert image.mimeType == "image/jpeg"
+    # Verify the image data is valid base64 that decodes to a JPEG
+    raw = base64.b64decode(image.data)
+    decoded = Image.open(io.BytesIO(raw))
+    assert decoded.width == 400
+    assert decoded.height == 300
     # base64 must never leak into the text block
     assert image.data not in text.text
 
@@ -199,13 +205,25 @@ def test_screenshot_inline_error_result_passthrough() -> None:
 
 def test_screenshot_inline_too_large_skips(tmp_path) -> None:
     import asyncio
+    import os
     import computer_use.mcp_server as server
+    from PIL import Image
+
+    # Lower the base64 budget so a modest noise image triggers the gate
+    orig_limit = server.MAX_INLINE_IMAGE_BASE64_BYTES
+    server.MAX_INLINE_IMAGE_BASE64_BYTES = 200_000
 
     png = tmp_path / "big.png"
-    png.write_bytes(b"\x00" * (server._MAX_INLINE_IMAGE_RAW_BYTES + 1))
+    # Random noise defeats DCT compression
+    pixels = os.urandom(1920 * 1080 * 3)
+    Image.frombytes("RGB", (1920, 1080), pixels).save(png, format="PNG")
 
-    content = asyncio.run(server._screenshot_result_content(_png_result(png)))
-    assert len(content) == 1
+    try:
+        content = asyncio.run(server._screenshot_result_content(_png_result(png)))
+        assert len(content) == 1
+        assert json.loads(content[0].text)["inline_image_skipped"] == "payload_too_large"
+    finally:
+        server.MAX_INLINE_IMAGE_BASE64_BYTES = orig_limit
     assert json.loads(content[0].text)["inline_image_skipped"] == "payload_too_large"
 
 
@@ -216,6 +234,48 @@ def test_screenshot_inline_unparseable_passthrough() -> None:
     content = asyncio.run(server._screenshot_result_content("not json at all"))
     assert len(content) == 1
     assert content[0].text == "not json at all"
+
+
+def test_screenshot_inline_uses_jpeg_compression(tmp_path, monkeypatch):
+    """When include_image=true, the inline image is JPEG (not PNG)."""
+    import asyncio
+    import base64
+    import io
+    import computer_use.mcp_server as server
+    from PIL import Image
+
+    screenshot_dir = tmp_path / "screenshots"
+    screenshot_dir.mkdir()
+    monkeypatch.setattr(
+        server, "load_config",
+        lambda: {
+            "screenshot_dir": str(screenshot_dir),
+            "image": {"inline": {"max_width": 800, "jpeg_quality": 60}},
+        },
+    )
+
+    png_path = screenshot_dir / "test.png"
+    img = Image.new("RGB", (1920, 1080), color=(200, 100, 50))
+    img.save(png_path, format="PNG")
+
+    result = {
+        "screenshot_taken": True,
+        "saved_path": str(png_path),
+        "width": 1920,
+        "height": 1080,
+    }
+    content = asyncio.run(server._screenshot_result_content(json.dumps(result)))
+
+    assert len(content) == 2
+    text_data = json.loads(content[0].text)
+    assert text_data["inline_image"] is True
+    assert text_data["inline_mime_type"] == "image/jpeg"
+    assert content[1].mimeType == "image/jpeg"
+    # Verify dimensions are resized (1920 → 800, 1080 → 450)
+    raw = base64.b64decode(content[1].data)
+    decoded = Image.open(io.BytesIO(raw))
+    assert decoded.width == 800
+    assert decoded.height == 450
 
 
 def test_include_image_not_forwarded_to_dispatch(monkeypatch) -> None:
@@ -668,6 +728,7 @@ def _minimal_config(tmpdir: str, screenshot_sensitive_window_check: bool = False
             "allowed_commands": [],
         },
         "display": {"default_monitor": 1},
+        "image": {"inline": {"max_width": 1600, "jpeg_quality": 75}},
     }
 
 

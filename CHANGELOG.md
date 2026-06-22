@@ -28,6 +28,12 @@
 #### 变更内容
 - 截图 sidecar 新增 cursor 字段（screen/image 坐标+style）；crop_screenshot 响应新增 annotation_layers（cursor + crop_region 结构化数据）；annotated_source_path 同时包含光标十字和裁剪 L 角标；annotate_region 回归测试保证不破坏已有光标标记。
 
+### screenshot: inline JPEG compression for context budget
+
+#### 变更内容
+- screenshot 的 include_image=true 路径现在将内联图像压缩为 JPEG（默认最大宽度 1600px，质量 75），显著减少上下文中的图像体积。落盘文件保持全分辨率 PNG 不变。新增 image.inline.max_width / image.inline.jpeg_quality 配置项。
+
+
 
 
 
