@@ -1,302 +1,244 @@
 # Computer Use MCP
 
-A local MCP server that gives AI agents the ability to see and control a Windows desktop through screenshots, UI Automation, and mouse/keyboard actions.
+A local MCP server that gives AI agents the ability to see and control a Windows desktop through screenshots, UI Automation, and mouse/keyboard actions. 42 deterministic tools — no model calls, no OCR, no magic.
 
-## Model requirement
+---
 
-This server is intended for multimodal agents. The MCP `screenshot` tool returns a local PNG path, so the client/model must be able to open and understand image files to perform visual GUI tasks. A text-only model can still call structured tools such as `get_monitors`, `find_control`, task review, or audit commands, but it cannot reliably use screenshots to decide where to click.
+## Quick Start
 
-## What it does
-
-- Takes screenshots of your desktop and returns saved local file paths to MCP clients (never base64 in responses).
-- Clicks, moves, scrolls, and types at physical virtual screen coordinates, with deterministic safety enforcement.
-- Crops screenshots with automatic red L-bracket region annotation for visual verification.
-- Records structured cursor/region metadata (`annotation_layers`) to answer "where was the mouse?" and "what region did I crop?" in one read.
-- Finds UI controls via UI Automation (`find_control`, `get_ui_snapshot`, `click_by_uid`).
-- Waits for windows/controls to appear (`wait_for_window`, `wait_for_control`).
-- Launches apps by Start Menu / Desktop shortcut (`launch_app`) with runtime whitelist escalation.
-- Executes batched multi-step sequences in a single MCP call (`batch`, `run_task_plan`).
-- Audits execution with trace, task sessions, and retrospective reports (`start_task`, `review_task_session`, `save_review`).
-
-## What it does NOT do
-
-- Does NOT call any model API itself.
-- Does NOT work on macOS or Linux (Windows only).
-- Does NOT bypass UAC, UIAccess/UIPI, or game anti-cheat protections.
-- Does NOT support mixed-DPI multi-monitor setups in the MVP (fail-fast).
-- Does NOT handle dynamic monitor hot-plugging; restart the server to pick up new layouts.
-
-## Install
+### Install
 
 ```powershell
-# 1. Create a virtual environment
 python -m venv .venv
 .venv\Scripts\activate.ps1
-
-# 2. Install dependencies
 pip install -e .
-
-# 3. (Optional) install dev dependencies
-pip install -e ".[dev]"
+pip install -e ".[dev]"   # optional: pytest, pywin32
 ```
 
-## First run
+### Configure
 
-1. Run `python -m computer_use doctor`.
-2. Register the MCP server in your client.
-   - Generic MCP client: see `examples/clients/generic-mcp.json`.
-   - Kimi Code: see `examples/clients/kimi-code.toml`.
-3. If your client supports MCP prompts, load `computer_use_guidance`.
-4. If your client supports Skills, load `skills/computer-use/SKILL.md`.
-5. Run read-only smoke tools first: `get_monitors`, `get_ui_snapshot`, `review_task_session` on an explicit task.
-6. Only then perform real mouse/keyboard tasks.
+Copy `config.example.yaml` to `~/.computer-use/config.yaml`. The config controls log/screenshot/trace directories, safety rules, and whitelist defaults. By default, common system apps (notepad, calc, explorer, etc.) are pre-approved (`use_builtin_defaults: true`). Set to `false` for strict whitelist mode.
 
-## Tests
+### Register with an MCP Client
 
-Run the automated test suite (excludes real-GUI manual tests):
+The server runs over stdio — no network ports. Point your MCP client at the venv Python:
 
-```powershell
-.venv\Scripts\python.exe -m pytest tests/ -v -m "not manual"
+**OpenCode** (`~/.config/opencode/opencode.json`):
+```json
+{
+  "mcp": {
+    "computer-use": {
+      "command": ["D:\\path\\to\\.venv\\Scripts\\python.exe", "-m", "computer_use.mcp_server"],
+      "env": { "PYTHONUTF8": "1" },
+      "enabled": true,
+      "type": "local"
+    }
+  }
+}
 ```
 
-To run the real-GUI integration tests in `tests/manual/`:
-
-```powershell
-$env:COMPUTER_USE_RUN_MANUAL = "1"
-.venv\Scripts\python.exe -m pytest tests/manual -v
-```
-
-Only run manual tests on an idle Windows desktop with no sensitive windows visible.
-
-## Register with an MCP Client
-
-Use the Python interpreter from this checkout's virtual environment and run the server module over stdio.
-
-### cc-switch (recommended for multi-client management)
-
-If you use [cc-switch](https://github.com/Cong-Cong-Man/ClaudeCodeSwitch) to manage MCP servers across clients:
-
-1. Install this server locally (see [Install](#install)).
-2. Copy `config.example.yaml` to `~/.computer-use/config.yaml` and edit `allowed_commands`.
-3. Open cc-switch and go to the MCP management page.
-4. Click **Add MCP** / **+** and fill in:
-   - **Name**: `computer-use`
-   - **Type**: `stdio`
-   - **Command**: the absolute path to this checkout's Python interpreter, e.g. `C:\Users\<you>\Projects\computer-use-mcp\.venv\Scripts\python.exe`
-   - **Args**: `-m computer_use.mcp_server`
-   - **Env**: `PYTHONUTF8=1` (recommended on Chinese Windows to avoid encoding issues)
-5. Enable the clients you want (opencode, codex, gemini, etc.).
-6. Reactivate the MCP entry or restart the target client to pick up the latest code after updates.
-
-### Generic MCP client
-
+**Generic MCP client:**
 ```json
 {
   "mcpServers": {
     "computer-use": {
-      "command": "C:\\Users\\<you>\\Projects\\computer-use-mcp\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\.venv\\Scripts\\python.exe",
       "args": ["-m", "computer_use.mcp_server"]
     }
   }
 }
 ```
 
-### Kimi Code
+Replace `C:\\path\\to\\.venv` with the absolute path to this checkout's virtual environment. `PYTHONUTF8=1` is recommended on Chinese Windows.
 
-```toml
-[mcp.servers.computer-use]
-command = "C:\\Users\\<you>\\Projects\\computer-use-mcp\\.venv\\Scripts\\python.exe"
-args = ["-m", "computer_use.mcp_server"]
-```
-
-Replace the path with the absolute path where you cloned this server. The server itself does not depend on a specific MCP client.
-
-## Agent guidance
-
-Prefer MCP prompt `computer_use_guidance` when your client supports prompts. Agents that support Skills can load [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md) for safe operating discipline. Generic MCP clients can use [docs/agent-usage.md](docs/agent-usage.md) or [examples/clients/agent-prompt.md](examples/clients/agent-prompt.md) as a prompt snippet.
-
-## 如何使用该 MCP 工具
-
-这个 MCP 适合让多模态 AI Agent 操作 Windows 桌面应用。它本身不包含模型，也不替你规划任务；它只提供观察屏幕、读取 UIA 信息、控制鼠标键盘、记录 trace/task 的本地工具。
-
-推荐流程：
-
-1. 安装依赖后先运行自检：
-
-   ```powershell
-   python -m computer_use doctor
-   ```
-
-   确认输出为 JSON，且关键检查为 `ok`。如果只有 `model_capability` 是 `warning`，表示 MCP 环境可用，但执行视觉 GUI 任务仍需要多模态模型或客户端能读取本地 PNG 截图。
-
-2. 在你的 MCP 客户端中注册服务器：
-
-   ```json
-   {
-     "mcpServers": {
-       "computer-use": {
-         "command": "C:\\Project\\computer-use-mcp\\.venv\\Scripts\\python.exe",
-         "args": ["-m", "computer_use.mcp_server"]
-       }
-     }
-   }
-   ```
-
-   把 `command` 改成你本机仓库虚拟环境里的 Python 绝对路径。Kimi Code 可参考 [examples/clients/kimi-code.toml](examples/clients/kimi-code.toml)，通用客户端可参考 [examples/clients/generic-mcp.json](examples/clients/generic-mcp.json)。
-
-3. 让 Agent 读取使用指南：
-
-   - 如果客户端支持 MCP prompts，加载 `computer_use_guidance`。
-   - 如果客户端支持 Skills，加载 [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md)。
-   - 如果都不支持，把 [examples/clients/agent-prompt.md](examples/clients/agent-prompt.md) 的内容放进 Agent 系统提示或任务提示。
-
-4. 先做只读 smoke test，不要一上来点击或输入：
-
-   ```powershell
-   python tools\smoke_mcp_client.py --server .\.venv\Scripts\python.exe --args -m computer_use.mcp_server
-   ```
-
-   也可以让 Agent 先调用 `get_monitors`、`screenshot`、`get_ui_snapshot`、`start_task`、`review_task_session` 等只读或审计类工具，确认工具链能正常返回结果。
-
-5. 执行真实 GUI 任务时，按这个闭环走：
-
-   - `start_task(goal=...)` 创建业务任务会话，后续工具调用带上返回的 `task_id`。
-  - 先观察：优先 `screenshot` 和 `get_ui_snapshot`，不要凭空猜坐标。截图 sidecar 包含 cursor 元数据（screen/image 坐标），crop 后 `annotated_source_path` 同时展示光标和裁剪区域。
-  - 再定位：能用 `find_control` / `click_control` 等 UIA 工具时优先用语义定位；UIA 不可用时再根据截图坐标操作。小目标先用 `crop_screenshot` 放大。
-  - 再动作：多步操作优先用原生 `batch`，不要在 Bash/PowerShell 里手写脚本绕过 MCP。验证过的稳定桌面布局可用 fast-path batch 减少往返。
-   - 再验证：每轮动作后截图或读取 snapshot，确认界面状态确实变化。
-   - 最后复盘：用 `review_task_session(task_id)` 查看 trace、截图、artifact，再 `finish_task(task_id, summary=...)` 结束任务。
-
-6. 给 Agent 的任务描述可以这样写：
-
-   ```text
-   使用 computer-use MCP 操作 Windows 桌面。请先 start_task 创建任务，
-   通过 screenshot/get_ui_snapshot 观察界面，优先使用 UIA 语义定位，
-   必要时再用坐标点击。每次真实输入后截图验证，最后 review_task_session
-   并 finish_task。不要扫描 ~/.computer-use/traces 猜测任务状态。
-   ```
-
-注意事项：
-
-- 视觉 GUI 任务必须使用多模态模型；纯文本模型不能可靠地根据截图决定点击位置。
-- `screenshot` 返回的是本地 PNG 路径，不返回 base64；客户端或模型必须能读取该文件。`include_image=true` 可按需获得内联图片（且不代替文件路径）。
-- 鼠标键盘是真实输入设备，运行前确认当前机器无人手动操作鼠标键盘。
-- 遇到 `command_not_whitelisted` 或 `sensitive_window_blocked` 时，Agent 会询问你是否添加白名单（once/session/permanent）。
-- `config.yaml` 和 `docs/recipes/` 不受 git 追踪（`.gitignore` 排除），包含本机特定配置和配方，不会推送到 GitHub。
-
-## Coordinate system
-
-All tool coordinates are **physical virtual screen pixels** (mss coordinates).
-The origin is the top-left of the virtual desktop and coordinates map 1:1 with
-screenshot pixels.
-
-- The virtual desktop may span multiple monitors.
-- Valid coordinates must fall within an actual monitor; coordinates in virtual
-  screen gaps are rejected.
-- Monitor indices follow the mss 1-based convention: `1` = primary, `2` =
-  secondary, etc. Use `0` for the entire virtual desktop.
-
-If your setup has multiple monitors with different scaling factors, the server
-will fail fast in the MVP.
-
-## Tools
-
-The server exposes 42 tools organized into categories:
-
-| Category | Key tools |
-|----------|-----------|
-| Observe | `screenshot`, `get_ui_snapshot`, `get_monitors`, `find_control`, `inspect_point` |
-| Visual click | `click_on_screenshot`, `crop_screenshot` (with red L-bracket annotation) |
-| Raw input | `click`, `move_to`, `type`, `key_combo`, `press_key`, `scroll`, `drag`, `mouse_down/up` |
-| Composite | `open_menu`, `fill_form`, `scroll_until` |
-| Batch | `batch`, `run_task_plan` |
-| Task audit | `start_task`, `finish_task`, `review_task`, `review_task_session`, `save_review` |
-| Wait | `wait_for_window`, `wait_for_control`, `sleep` |
-| Launch | `launch_app`, `activate_window` |
-| Security | `add_command_whitelist`, `add_window_exception` |
-
-For the full tool reference with parameters and descriptions, see [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md) or load the `computer_use_guidance` MCP prompt.
-
-## Local debug CLI
+### Verify
 
 ```powershell
-# Screenshot to stdout (base64, debug CLI only)
-python -m computer_use screenshot
+# Self-check (no mouse/keyboard input)
+python -m computer_use doctor
 
-# Screenshot a single monitor
-python -m computer_use screenshot --monitor 2
-
-# Virtual screen size
-python -m computer_use size
-
-# List monitors
-python -m computer_use monitors
-
-# Click at (100, 200)
-python -m computer_use click 100 200
-
-# Type text
-python -m computer_use type "hello world"
-
-# Key combo
-python -m computer_use key ctrl c
+# Read-only protocol smoke test
+python tools\smoke_mcp_client.py --server .\.venv\Scripts\python.exe --args -m computer_use.mcp_server
 ```
 
-## Run tests
+Expected: `doctor` returns JSON with `status: ok`, smoke test returns `status: ok` with 42 tools listed.
+
+---
+
+## Capability Boundary
+
+### What it does
+
+- **Screenshot** the desktop or a single monitor, return a local PNG path (never base64 in responses).
+- **Crop** with automatic red L-bracket region annotation — see both cursor position and crop bounds in one `annotated_source_path`.
+- **Click, move, scroll, type, drag** at physical virtual screen coordinates with coordinate→safety→input chain.
+- **Find controls** via UI Automation (`find_control`, `get_ui_snapshot`, `click_by_uid`).
+- **Wait** for windows/controls to appear/disappear (`wait_for_window`, `wait_for_control`).
+- **Launch apps** by Start Menu / Desktop shortcut (`launch_app`, `activate_window`) with runtime whitelist escalation.
+- **Batch** multi-step sequences in a single MCP call (`batch`, `run_task_plan`).
+- **Audit** execution with trace, task sessions, and retrospective reports (`start_task`, `review_task_session`, `save_review`).
+
+### What it does NOT do
+
+- Does NOT call any model API or perform OCR.
+- Does NOT work on macOS or Linux (Windows only).
+- Does NOT bypass UAC, UIAccess/UIPI, or game anti-cheat protections.
+- Does NOT support mixed-DPI multi-monitor setups (fail-fast).
+- Does NOT handle dynamic monitor hot-plugging (restart server to pick up new layouts).
+
+---
+
+## Tools Overview
+
+42 tools organized by category:
+
+| Category | Tools |
+|----------|-------|
+| **Observe** | `screenshot`, `get_ui_snapshot`, `get_monitors`, `find_control`, `inspect_point` |
+| **Visual click** | `click_on_screenshot`, `crop_screenshot` (with red L-bracket annotation) |
+| **Raw input** | `click`, `move_to`, `type`, `key_combo`, `press_key`, `scroll`, `drag`, `mouse_down/up` |
+| **Composite** | `open_menu`, `fill_form`, `scroll_until` |
+| **Batch** | `batch`, `run_task_plan` |
+| **Task audit** | `start_task`, `finish_task`, `review_task`, `review_task_session`, `save_review` |
+| **Wait** | `wait_for_window`, `wait_for_control`, `sleep` |
+| **Launch** | `launch_app`, `activate_window` |
+| **Security** | `add_command_whitelist`, `add_window_exception` |
+
+For the full tool reference with every parameter and description, load the `computer_use_guidance` MCP prompt or read [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md).
+
+---
+
+## Safety & Permissions
+
+All mouse/keyboard input goes through a deterministic safety chain:
+
+- **Coordinate validation**: input must fall within the primary monitor bounds. Secondary-monitor coordinates are rejected.
+- **Target window check**: the control under the cursor is inspected. Sensitive processes (keepass, certmgr, 1password, lastpass, mmc) and window classes (`#32770`) are blocked. **Hardcoded sensitive processes are NEVER bypassable.**
+- **Text validation**: dangerous shell commands and file deletions are rejected before typing.
+
+### Runtime Whitelist Escalation
+
+When `launch_app` or a window interaction is blocked, the agent asks the user to grant permission at one of three levels:
+
+| Level | Scope | How to grant |
+|-------|-------|-------------|
+| `once` | This execution only | `add_command_whitelist(command, level="once")` |
+| `session` | Until server restart | `add_command_whitelist(command, level="session")` |
+| `permanent` | Writes to config.yaml | `add_command_whitelist(command, level="permanent")` |
+
+For sensitive windows (e.g. `#32770`): `add_window_exception(class_name="#32770", level="once|session")`.
+
+Built-in defaults (`use_builtin_defaults: true`) pre-approve common system apps. Set to `false` for whitelist-only strict mode.
+
+---
+
+## For AI Agents
+
+### Model Requirement
+
+This server is intended for **multimodal agents**. The `screenshot` tool returns a local PNG path — the agent must open and understand that image file. Use `include_image=true` to receive the screenshot inline when supported by the client.
+
+A text-only agent can still use structured tools (`get_monitors`, `find_control`, `get_ui_snapshot`, `review_task`, `review_task_session`, `list_tasks`), but cannot perform visual tasks reliably.
+
+### Coordinate System
+
+All tool coordinates are **physical virtual screen pixels** (mss coordinates), 1:1 with screenshot pixels. Origin is top-left of the virtual desktop.
+
+- `monitor=0`: entire virtual desktop (may span multiple monitors).
+- `monitor=1`: primary monitor (default).
+- `monitor=2,3,...`: secondary monitors (screenshot-only; input always restricted to primary).
+
+Prefer `click_on_screenshot(screenshot_path, image_x, image_y)` over raw `click(x, y)` — it maps image pixels to screen coordinates using capture metadata and runs the full safety chain.
+
+### Recommended Workflow
+
+1. **Start a task**: `start_task(goal="...")` → keep the returned `task_id` for all subsequent tool calls. If an active task exists, tools without `task_id` are rejected.
+2. **Observe**: `screenshot(monitor=1)` → read the returned file. For small targets, `crop_screenshot` to zoom in. The `annotated_source_path` shows both the cursor crosshair and the crop region in one image.
+3. **Locate**: prefer UIA tools (`find_control`, `click_by_text`, `click_by_uid`). Fall back to screenshot-based coordinates only when UIA cannot see the target.
+4. **Act**: use `batch` for multi-step deterministic sequences. Avoid Bash scripts wrapping MCP calls.
+5. **Verify**: screenshot after every action. The red cursor marker in the screenshot confirms where input actually landed. `annotation_layers` provides structured cursor/crop coordinates for programmatic verification.
+6. **Close out**: `review_task_session(task_id)` for audit evidence, then `finish_task(task_id, summary="...")`. Cancel abandoned tasks with `cancel=true`.
+
+**Fast path**: for workflows validated on a stable desktop layout, condense step 2-4 into one `batch` with `wait_for_window` guards and a single `final_screenshot`. See local `docs/recipes/*.md` for machine-specific recipes.
+
+### Load the Full Discipline
+
+The authoritative agent discipline is in [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md). If your client supports MCP prompts, load `computer_use_guidance` instead. Key rules the SKILL enforces:
+
+- Never scan `~/.computer-use/traces/` to guess task state — use `review_task_session`.
+- Never call `python -m computer_use screenshot` from Bash — it outputs base64 that bloats context.
+- `screenshot` returns `saved_path`, not base64 (except `include_image=true` opt-in).
+- Wait for windows with `wait_for_window`, not `sleep`.
+- Crop after orienting — a 300×120 crop costs a fraction of a 1920×1080 full frame in context.
+
+---
+
+## Configuration Reference
+
+Runtime config defaults to `~/.computer-use/config.yaml`. Key settings:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `log_dir` | `~/.computer-use/logs` | Rotating log (10 MB, 5 backups) |
+| `screenshot_dir` | `~/.computer-use/screenshots` | Where PNGs are saved |
+| `trace_dir` | `~/.computer-use/traces` | Execution traces (date-partitioned) |
+| `task_dir` | `~/.computer-use/tasks` | Business task sessions |
+| `safety.allowed_commands` | `[]` | Additional command whitelist entries |
+| `safety.use_builtin_defaults` | `true` | Pre-approve common system apps |
+| `safety.screenshot_sensitive_window_check` | `true` | Redact screenshots over sensitive windows |
+| `display.default_monitor` | `1` | Default screenshot monitor |
+
+Override with `COMPUTER_USE_CONFIG` env var. The legacy `~/.kimi-code/mcp/computer-use/config.yaml` path is still supported as fallback.
+
+`config.yaml` and `docs/recipes/` are **excluded from git tracking** (`.gitignore`) — they contain machine-specific data and should never be pushed to GitHub.
+
+---
+
+## Development
+
+### Local Debug CLI
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/ -v
+python -m computer_use doctor           # self-check
+python -m computer_use screenshot       # capture to PNG (base64 stdout)
+python -m computer_use size             # virtual screen size
+python -m computer_use monitors         # list monitors
+python -m computer_use click 100 200    # click at coordinates
+python -m computer_use type "hello"     # type text
+python -m computer_use key ctrl c       # key combo
 ```
 
-## Safety
+### Running Tests
 
-- Dangerous shell commands and file deletions are blocked.
-- Password controls are detected via UI Automation and refused.
-- Sensitive application processes (keepass, certmgr, etc.) and window classes (`#32770`) are protected. Hardcoded sensitive processes are NEVER bypassable.
-- **Runtime permission escalation**: when a command or window is blocked, the agent can ask the user to grant a one-time (`once`), session-scoped (`session`), or permanent (`permanent`) exception via `add_command_whitelist` / `add_window_exception`.
-- Built-in defaults (`use_builtin_defaults: true`) allow common system apps (notepad, calc, explorer, etc.) automatically. Set to `false` for strict whitelist-only mode.
-- Screenshots can optionally redact when sensitive windows are detected in the capture region.
-- All actions are logged to `~/.computer-use/logs/computer-use.log` with rotation by default.
+```powershell
+# Automated suite (423 tests, no real GUI)
+.venv\Scripts\python.exe -m pytest tests/ -v -m "not manual"
 
-## Configuration
+# Real-GUI integration tests (idle desktop only!)
+$env:COMPUTER_USE_RUN_MANUAL = "1"
+.venv\Scripts\python.exe -m pytest tests/manual -v
+```
 
-Runtime configuration defaults to `~/.computer-use/config.yaml`. Set
-`COMPUTER_USE_CONFIG` to point at another YAML file, or pass an explicit config
-path in code. For compatibility, if the new default config does not exist but
-the legacy `~/.kimi-code/mcp/computer-use/config.yaml` exists, it is still read.
+### Documentation
 
-Use `config.yaml` in this repository as a template to customize logging,
-screenshot, trace, task, display, and safety settings. MCP client config files
-are only for registering the server process with that client.
+| Document | Topic |
+|----------|-------|
+| [AGENTS.md](AGENTS.md) | AI agent behavior rules + task workflow |
+| [STRUCTURE.md](STRUCTURE.md) | Full document index |
+| [docs/overview.md](docs/overview.md) | Architecture & design decisions |
+| [docs/api.md](docs/api.md) | MCP tool contracts |
+| [docs/deployment.md](docs/deployment.md) | Environment setup & env vars |
+| [docs/pitfalls.md](docs/pitfalls.md) | Known traps (encoding, coordinates, UIA gaps) |
+| [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md) | Agent operating discipline |
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
 
-If `launch_app` returns a whitelist error, you have three options:
-1. **Runtime grant**: the agent asks your permission and calls `add_command_whitelist(command, level="once|session|permanent")`.
-2. **Edit config**: add the command path to `safety.allowed_commands` in `~/.computer-use/config.yaml`. Built-in defaults (notepad, calc, etc.) are already allowed unless `use_builtin_defaults` is `false`.
-3. **Permanent grant**: `add_command_whitelist(command, level="permanent")` writes directly to config.yaml.
-
-Sensitive processes (keepass, certmgr, 1password, lastpass, mmc) are always blocked regardless of whitelist entries.
-
-## 文档
-
-| 文档 | 说明 |
-|------|------|
-| [docs/overview.md](docs/overview.md) | 系统架构与设计决策 |
-| [docs/api.md](docs/api.md) | MCP 工具约定 |
-| [docs/deployment.md](docs/deployment.md) | 部署与环境配置 |
-| [docs/pitfalls.md](docs/pitfalls.md) | 已知环境陷阱 |
-| [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md) | Agent 使用纪律（完整工具表 + 验证流程 + 安全规则） |
-| [STRUCTURE.md](STRUCTURE.md) | 文档索引 |
-| [CHANGELOG.md](CHANGELOG.md) | 变更记录 |
-
-## AI Agent 协作
-
-本仓库配置了面向 AI Agent 的文档体系。如果你是 AI Agent，请加载 [AGENTS.md](AGENTS.md)（或 [CLAUDE.md](CLAUDE.md) / [GEMINI.md](GEMINI.md)）获取行为规则和信息导航。
+---
 
 ## Troubleshooting
 
-- **Server fails to start**: Check that your virtual environment is activated
-  and that `mcp` is installed.
-- **Coordinates are wrong**: Ensure you are using physical virtual screen
-  pixels (mss coordinates) and that you do not have mixed-DPI monitors.
-- **Clicks don't work in some apps**: Some apps block synthetic input
-  (UAC/UIPI/anti-cheat). This is a documented limitation.
+- **Server fails to start**: Activate venv, confirm `mcp` is installed.
+- **Coordinates are wrong**: Mixed-DPI monitors cause fail-fast. Ensure uniform scaling.
+- **Clicks don't land**: Some apps block synthetic input (UAC/UIPI/anti-cheat). Use UIA Invoke when available.
+- **Chinese text garbled**: Set `PYTHONUTF8=1` in the MCP server environment.
+- **`launch_app` blocked**: Use runtime whitelist escalation (`add_command_whitelist`) or add the path to `config.yaml`.
+- **Screenshot appears empty/redacted**: The capture region contains a sensitive window. Move/resize the target app.
