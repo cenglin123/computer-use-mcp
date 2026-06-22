@@ -631,6 +631,49 @@ TOOLS: list[Tool] = [
         },
     ),
     Tool(
+        name="add_command_whitelist",
+        description="Add a command to the runtime whitelist at the requested permission level. Call this after user confirmation when a command is blocked by the whitelist. level='once' grants one-time use, 'session' grants for the current server session, 'permanent' writes to config.yaml.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "The executable path or name to whitelist (e.g., 'D:/Program Files/SAP/saplogon.exe' or 'notepad.exe').",
+                },
+                "level": {
+                    "type": "string",
+                    "enum": ["once", "session", "permanent"],
+                    "default": "once",
+                    "description": "Permission level: 'once' (one successful use), 'session' (until server restart), 'permanent' (write to config.yaml).",
+                },
+            },
+            "required": ["command"],
+        },
+    ),
+    Tool(
+        name="add_window_exception",
+        description="Add a runtime exception for a sensitive window class or process. Call this after user confirmation when a window interaction is blocked by the sensitive window check. level='once' grants one-time use, 'session' grants for the current server session. Hardcoded sensitive processes (keepass, certmgr, etc.) are NEVER bypassable.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "class_name": {
+                    "type": "string",
+                    "description": "The window class name to except (e.g., '#32770'). Use when the block was on class_name.",
+                },
+                "process_name": {
+                    "type": "string",
+                    "description": "The process name to except (e.g., 'saplogon.exe'). Use when the block was on process_name. Hardcoded sensitive processes (keepass, certmgr, etc.) are never bypassable.",
+                },
+                "level": {
+                    "type": "string",
+                    "enum": ["once", "session"],
+                    "default": "once",
+                    "description": "Permission level: 'once' (one successful use) or 'session' (until server restart).",
+                },
+            },
+        },
+    ),
+    Tool(
         name="batch",
         description=(
             "Execute a sequence of tools in a single call. This is the preferred way to run multi-step GUI workflows. "

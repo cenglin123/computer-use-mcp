@@ -65,6 +65,8 @@ def test_tools_listed() -> None:
         "list_tasks",
         "review_task_session",
         "save_review",
+        "add_command_whitelist",
+        "add_window_exception",
         "batch",
     }
 

@@ -15,6 +15,20 @@ LEGACY_CONFIG_PATH = (
 )
 
 
+_BUILTIN_COMMANDS: list[str] = [
+    "notepad.exe",
+    "calc.exe",
+    "explorer.exe",
+    "cmd.exe",
+    "powershell.exe",
+    "mspaint.exe",
+    "write.exe",
+    "taskmgr.exe",
+    "control.exe",
+    "charmap.exe",
+    "snippingtool.exe",
+]
+
 _DEFAULTS: dict[str, Any] = {
     "log_dir": Path.home() / ".computer-use" / "logs",
     "screenshot_dir": Path.home() / ".computer-use" / "screenshots",
@@ -26,6 +40,7 @@ _DEFAULTS: dict[str, Any] = {
         "sensitive_window_classes": [],
         "screenshot_sensitive_window_check": True,
         "allowed_commands": [],
+        "use_builtin_defaults": True,
     },
     "display": {
         "default_monitor": 1,

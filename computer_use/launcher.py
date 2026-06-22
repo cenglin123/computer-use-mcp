@@ -41,16 +41,22 @@ def _whitelist_error(target_path: str) -> dict[str, Any]:
     if not allowed:
         return {
             "launched": False,
-            "error": (
-                "No commands are allowed. Add entries to allowed_commands in "
-                f"config.yaml. {_CONFIG_EXAMPLE_HINT}"
+            "error": "no_commands_allowed",
+            "command": target_path,
+            "next_action": (
+                "No commands are in the permanent allowed_commands list. "
+                "Ask user to grant permission via add_command_whitelist. "
+                f"{_CONFIG_EXAMPLE_HINT}"
             ),
         }
     return {
         "launched": False,
-        "error": (
-            f"Command '{target_path}' is not in allowed_commands whitelist. "
-            f"{_CONFIG_EXAMPLE_HINT}"
+        "error": "command_not_whitelisted",
+        "command": target_path,
+        "next_action": (
+            f"'{target_path}' is not in the whitelist. Ask user: "
+            "\"Add to whitelist? Options: once / session / permanent\" "
+            "If user agrees, call add_command_whitelist(command=..., level=...)."
         ),
     }
 
@@ -214,5 +220,9 @@ def launch_app(name: str) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover
         logger.exception("InvokeVerb failed for %s", target_path)
         return {"launched": False, "error": str(exc)}
+
+    # Consume one-shot runtime permission after successful launch
+    from computer_use.runtime_permissions import consume_command_permission
+    consume_command_permission(target_path)
 
     return {"launched": True, "name": item_name, "target_path": target_path}

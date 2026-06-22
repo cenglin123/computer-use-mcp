@@ -54,6 +54,8 @@ from computer_use.core import (
 from computer_use.launcher import launch_app
 from computer_use.safety import (
     SafetyError,
+    SensitiveProcessError,
+    SensitiveWindowError,
     check_target_window,
     validate_coordinate,
     validate_monitor_index,
@@ -303,6 +305,37 @@ def _call_tool(
             dispatch_kwargs["task_id"] = task_id
             dispatch_kwargs["is_standalone"] = is_standalone
         payload = _dispatch_tool(name, dispatch_args, cs, **dispatch_kwargs)
+        _consume_runtime_permissions(name, dispatch_args)
+    except SensitiveWindowError as exc:
+        payload = json.dumps({
+            "error": "sensitive_window_blocked",
+            "class_name": getattr(exc, "class_name", None),
+            "detail": str(exc),
+            "next_action": (
+                f"Window class '{getattr(exc, 'class_name', 'unknown')}' is protected. "
+                "Ask user: \"Grant window exception? Options: once / session\" "
+                "If user agrees, call add_window_exception(class_name=..., level=...)."
+            ),
+        })
+        logging.warning("safety block (sensitive window): %s", exc)
+        error = exc
+    except SensitiveProcessError as exc:
+        process_name = getattr(exc, "process_name", None)
+        from computer_use.safety import is_hardcoded_sensitive_process
+        bypassable = not (process_name and is_hardcoded_sensitive_process(process_name))
+        payload = json.dumps({
+            "error": "sensitive_process_blocked",
+            "process_name": process_name,
+            "detail": str(exc),
+            "bypassable": bypassable,
+            "next_action": (
+                f"Process '{process_name or 'unknown'}' is "
+                f"{'hardcoded and NEVER bypassable.' if not bypassable else 'protected.'} "
+                f"{'Ask user if they want to grant an exception via add_window_exception?' if bypassable else ''}"
+            ),
+        })
+        logging.warning("safety block (sensitive process): %s", exc)
+        error = exc
     except SafetyError as exc:
         logging.warning("safety block: %s", exc)
         payload = json.dumps(
@@ -430,6 +463,20 @@ def _task_error(exc: Exception) -> dict[str, Any]:
             "existing_task_id": exc.existing_task_id,
         }
     raise exc
+
+
+def _consume_runtime_permissions(tool_name: str, args: dict) -> None:
+    """After a successful tool execution, consume one-shot runtime grants."""
+    from computer_use.runtime_permissions import consume_window_exception
+
+    _window_tools = frozenset({
+        "click", "move_to", "click_on_screenshot", "mouse_down",
+        "mouse_up", "drag", "type", "key_combo", "press_key",
+        "scroll", "batch", "click_by_uid", "click_by_text",
+        "open_menu", "fill_form", "scroll_until",
+    })
+    if tool_name in _window_tools:
+        consume_window_exception(None, None)
 
 
 def _dispatch_tool(
@@ -969,6 +1016,42 @@ def _dispatch_tool(
         except Exception as exc:
             result = _task_error(exc)
         return json.dumps(result)
+
+    if name == "add_command_whitelist":
+        from computer_use import runtime_permissions as rp
+        command = args["command"]
+        level = args.get("level", "once")
+        if level == "permanent":
+            rp.save_permanent_command(command)
+        rp.grant_command_permission(command, level)
+        return json.dumps({
+            "granted": True,
+            "command": command,
+            "level": level,
+            "next_action": f"Permission granted ({level}). Retry the blocked tool.",
+        })
+
+    if name == "add_window_exception":
+        from computer_use import runtime_permissions as rp
+        class_name = args.get("class_name")
+        process_name = args.get("process_name")
+        level = args.get("level", "once")
+        if not class_name and not process_name:
+            return json.dumps({
+                "error": "Either class_name or process_name is required.",
+            })
+        rp.grant_window_exception(
+            process_name=process_name,
+            class_name=class_name,
+            level=level,
+        )
+        return json.dumps({
+            "granted": True,
+            "class_name": class_name,
+            "process_name": process_name,
+            "level": level,
+            "next_action": f"Window exception granted ({level}). Retry the blocked tool.",
+        })
 
     raise ValueError(f"Unknown tool: {name}")
 

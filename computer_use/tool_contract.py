@@ -37,6 +37,8 @@ ATOMIC_AND_COMPOSITE_TOOL_NAMES = (
     "scroll_until",
     "retry_step",
     "review_task",
+    "add_command_whitelist",
+    "add_window_exception",
 )
 
 #: Top-level tools that are NOT valid nested steps (batch actions or task-plan

@@ -175,9 +175,10 @@ class TestLaunchAppMatching:
             result = launcher.launch_app("Bad")
 
         assert result["launched"] is False
-        assert "error" in result
-        assert "allowed_commands" in result["error"]
-        assert "config.example.yaml" in result["error"]
+        assert result["error"] == "command_not_whitelisted"
+        assert result.get("command") == "C:/Bad/bad.exe"
+        assert "next_action" in result
+        assert "whitelist" in result.get("next_action", "").lower()
         item.InvokeVerb.assert_not_called()
 
     def test_blocked_when_allowed_commands_empty(self) -> None:
@@ -192,9 +193,10 @@ class TestLaunchAppMatching:
             result = launcher.launch_app("App")
 
         assert result["launched"] is False
-        assert "error" in result
-        assert "No commands are allowed" in result["error"]
-        assert "config.example.yaml" in result["error"]
+        assert result["error"] == "no_commands_allowed"
+        assert result.get("command") == "C:/App/app.exe"
+        assert "next_action" in result
+        assert "config.example.yaml" in result.get("next_action", "")
         item.InvokeVerb.assert_not_called()
 
     def test_blocked_when_sensitive_process(self) -> None:

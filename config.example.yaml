@@ -17,12 +17,17 @@ safety:
   # warn/blank them. This is advisory in MVP; full protection requires user care.
   screenshot_sensitive_window_check: true
 
+  # Whether to prepend built-in system commands (notepad, calc, explorer,
+  # cmd, powershell, etc.) to the allowed list. Set to false for strict
+  # security mode where only config.yaml entries + runtime grants apply.
+  use_builtin_defaults: true
+
   # List of allowed command names or absolute paths for the launch_app tool.
-  # If unset or empty, all commands are blocked.
+  # Built-in defaults (see use_builtin_defaults above) are always allowed
+  # unless use_builtin_defaults is false. Add custom paths below:
   allowed_commands:
-    # Examples (update these paths to match your system):
-    - C:/Program Files (x86)/HiBit Uninstaller/HiBitUninstaller.exe
-    - notepad.exe
+    # Examples:
+    # - C:/Program Files (x86)/HiBit Uninstaller/HiBitUninstaller.exe
 
 display:
   # Default monitor for screenshot when no monitor argument is provided.
