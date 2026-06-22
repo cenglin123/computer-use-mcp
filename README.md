@@ -37,6 +37,25 @@ The server runs over stdio — no network ports. Point your MCP client at the ve
 }
 ```
 
+**Codex** (`~/.codex/config.toml`):
+```toml
+[mcp_servers.computer_use]
+command = "C:\\path\\to\\.venv\\Scripts\\python.exe"
+args = ["-m", "computer_use.mcp_server"]
+```
+
+**Claude Code** (`~/.claude/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "computer-use": {
+      "command": "C:\\path\\to\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "computer_use.mcp_server"]
+    }
+  }
+}
+```
+
 **Generic MCP client:**
 ```json
 {
