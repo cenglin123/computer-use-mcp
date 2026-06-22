@@ -1,15 +1,17 @@
 """Safety enforcement for Computer Use actions.
-
+ 
 All enforcement here is deterministic (hardcoded rules), not AI-based.
 """
-
+ 
 from __future__ import annotations
-
+ 
 import re
 from pathlib import Path
 from typing import Iterable
-
+ 
 from computer_use.config import load_config
+from computer_use.runtime_permissions import check_command_permission as _runtime_check_command
+from computer_use.runtime_permissions import check_window_exception as _runtime_check_window
 
 # Dangerous operations are never executed by this server.
 _DANGEROUS_COMMAND_PATTERNS = [
@@ -37,22 +39,50 @@ _SENSITIVE_WINDOW_CLASSES = {
 }
 
 
-def _sensitive_processes() -> set[str]:
-    config = load_config()
-    extra = config.get("safety", {}).get("sensitive_processes", [])
-    return _SENSITIVE_PROCESSES | {p.lower() for p in extra}
+# ---------------------------------------------------------------------------
+# SafetyError hierarchy for structured error handling
+# ---------------------------------------------------------------------------
+
+class SafetyError(Exception):
+    """Raised when an action violates the safety policy."""
+
+    pass
 
 
-def _sensitive_window_classes() -> set[str]:
-    config = load_config()
-    extra = config.get("safety", {}).get("sensitive_window_classes", [])
-    return _SENSITIVE_WINDOW_CLASSES | {c.lower() for c in extra}
+class SensitiveProcessError(SafetyError):
+    """Raised when a hardcoded sensitive process is the target.
+
+    Carries structured data so mcp_server.py can extract details
+    without parsing error message strings.
+    """
+    def __init__(self, message: str, process_name: str):
+        super().__init__(message)
+        self.process_name = process_name
+
+
+class SensitiveWindowError(SafetyError):
+    """Raised when a hardcoded sensitive window class is the target.
+
+    Carries structured data so mcp_server.py can extract details
+    without parsing error message strings.
+    """
+    def __init__(self, message: str, class_name: str):
+        super().__init__(message)
+        self.class_name = class_name
+
+
+# Placeholder — Task 5 will define the authoritative _BUILTIN_COMMANDS in config.py.
+# For now import a stub so the module loads; Task 5 replaces this.
+_BUILTIN_COMMANDS: list[str] = []
 
 
 def _allowed_commands() -> list[str]:
-    """Return configured allowed commands as normalized strings."""
+    """Return configured allowed commands including built-in defaults."""
     config = load_config()
-    commands = config.get("safety", {}).get("allowed_commands", [])
+    commands = list(config.get("safety", {}).get("allowed_commands", []))
+    use_defaults = config.get("safety", {}).get("use_builtin_defaults", True)
+    if use_defaults:
+        commands = _BUILTIN_COMMANDS + commands
     return [_normalize_path(str(command)) for command in commands]
 
 
@@ -62,21 +92,25 @@ def _normalize_path(value: str) -> str:
 
 
 def is_allowed_command(command: str | Path) -> bool:
-    """Return True if ``command`` is in the allowed-commands whitelist.
+    """Return True if ``command`` is in the static or runtime whitelist."""
+    command_str = str(command) if isinstance(command, Path) else command
 
-    The whitelist contains exact command names and/or absolute paths. If the
-    configuration key is missing, an empty list is used and everything is
-    blocked.
-    """
+    # Check static whitelist (config + built-in defaults)
+    if _static_whitelist_check(command_str):
+        return True
+
+    # Check runtime permissions (once / session grants)
+    if _runtime_check_command(command_str):
+        return True
+
+    return False
+
+
+def _static_whitelist_check(command_str: str) -> bool:
+    """Check against the static config whitelist."""
     allowed = _allowed_commands()
     if not allowed:
         return False
-
-    if isinstance(command, Path):
-        command_str = str(command)
-    else:
-        command_str = command
-
     normalized_command = _normalize_path(command_str)
     command_basename = _normalize_path(Path(command_str).name)
     for allowed_command in allowed:
@@ -94,7 +128,6 @@ def is_allowed_command(command: str | Path) -> bool:
                     return True
         elif command_basename == allowed_command:
             return True
-
     return False
 
 
@@ -196,13 +229,24 @@ def validate_monitor_index(index: int, monitor_count: int) -> None:
 
 
 def is_sensitive_process(proc_name: str) -> bool:
-    return proc_name.lower().rsplit(".exe", 1)[0] in _sensitive_processes()
+    config = load_config()
+    extra = config.get("safety", {}).get("sensitive_processes", [])
+    all_sensitive = _SENSITIVE_PROCESSES | {p.lower() for p in extra}
+    return proc_name.lower().rsplit(".exe", 1)[0] in all_sensitive
 
 
 def is_sensitive_window_class(class_name: str | None) -> bool:
     if class_name is None:
         return False
-    return class_name.lower() in _sensitive_window_classes()
+    config = load_config()
+    extra = config.get("safety", {}).get("sensitive_window_classes", [])
+    all_sensitive = _SENSITIVE_WINDOW_CLASSES | {c.lower() for c in extra}
+    return class_name.lower() in all_sensitive
+
+
+def is_hardcoded_sensitive_process(proc_name: str) -> bool:
+    """Return True if the process is in the hardcoded (never-bypassable) list."""
+    return proc_name.lower().rsplit(".exe", 1)[0] in _SENSITIVE_PROCESSES
 
 
 def check_target_window(
@@ -211,18 +255,53 @@ def check_target_window(
     control_type: str | None,
     is_password: bool = False,
 ) -> None:
-    """Raise SafetyError if the target process or window class is sensitive."""
+    """Raise SafetyError subclass unless an exception or whitelist allows it.
+
+    Execution order (security-first):
+    1. Hardcoded sensitive PROCESSES (keepass, certmgr, etc.) are NEVER bypassable.
+       These short-circuit with ``SensitiveProcessError`` before any other check.
+    2. For window classes (hardcoded #32770 or config-added), runtime exceptions
+       are checked first. If a runtime exception exists, skip blocking.
+    3. If no runtime exception and the window class is sensitive, raise
+       ``SensitiveWindowError``.
+    """
+    # 1. Hardcoded sensitive PROCESSES — never bypassable
+    if process_name and is_hardcoded_sensitive_process(process_name):
+        raise SensitiveProcessError(
+            f"Refusing to interact with sensitive process: {process_name}",
+            process_name=process_name,
+        )
+
+    # 2. Runtime window exceptions (bypassable via add_window_exception)
+    if _runtime_check_window(process_name, class_name):
+        return
+
+    # 3. Fall through: check remaining sensitive processes and all window classes
     if process_name and is_sensitive_process(process_name):
-        raise SafetyError(
-            f"Refusing to interact with sensitive process: {process_name}"
+        raise SensitiveProcessError(
+            f"Refusing to interact with sensitive process: {process_name}",
+            process_name=process_name,
         )
     if class_name and is_sensitive_window_class(class_name):
-        raise SafetyError(
-            f"Refusing to interact with sensitive window class: {class_name}"
+        raise SensitiveWindowError(
+            f"Refusing to interact with sensitive window class: {class_name}",
+            class_name=class_name,
         )
 
 
-class SafetyError(Exception):
-    """Raised when an action violates the safety policy."""
-
-    pass
+__all__ = [
+    "SafetyError",
+    "SensitiveProcessError",
+    "SensitiveWindowError",
+    "is_allowed_command",
+    "is_sensitive_process",
+    "is_hardcoded_sensitive_process",
+    "is_sensitive_window_class",
+    "check_target_window",
+    "contains_shell_metacharacters",
+    "is_dangerous_text",
+    "is_path_deletion",
+    "validate_text_input",
+    "validate_coordinate",
+    "validate_monitor_index",
+]

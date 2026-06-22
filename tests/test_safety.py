@@ -166,3 +166,61 @@ def test_is_allowed_command_path_object(monkeypatch) -> None:
 )
 def test_contains_shell_metacharacters(text: str, expected: bool) -> None:
     assert contains_shell_metacharacters(text) is expected
+
+
+# --- New tests: runtime permission integration ---
+
+def test_is_allowed_command_with_runtime_once_grant():
+    from computer_use.runtime_permissions import (
+        grant_command_permission,
+        clear_runtime_permissions,
+    )
+    reset_config_cache()
+    config = load_config()
+    config["safety"]["allowed_commands"] = []  # nothing in permanent whitelist
+    grant_command_permission("C:/app/special.exe", "once")
+    assert is_allowed_command("C:/app/special.exe") is True
+    clear_runtime_permissions()
+
+
+def test_is_allowed_command_with_runtime_session_grant():
+    from computer_use.runtime_permissions import (
+        grant_command_permission,
+        clear_runtime_permissions,
+    )
+    reset_config_cache()
+    config = load_config()
+    config["safety"]["allowed_commands"] = []
+    grant_command_permission("custom-tool.exe", "session")
+    assert is_allowed_command("custom-tool.exe") is True
+    clear_runtime_permissions()
+
+
+def test_check_target_window_with_runtime_exception():
+    from computer_use.runtime_permissions import (
+        grant_window_exception,
+        clear_runtime_permissions,
+    )
+    grant_window_exception(process_name="saplogon.exe", class_name="#32770", level="once")
+    # Should not raise
+    check_target_window("saplogon.exe", "#32770", None)
+    clear_runtime_permissions()
+
+
+def test_check_target_window_still_blocks_without_exception():
+    with pytest.raises(SafetyError):
+        check_target_window("saplogon.exe", "#32770", None)
+
+
+def test_check_target_window_still_blocks_hardcoded_sensitive_process():
+    # keepass.exe is in the hardcoded sensitive list — runtime exception
+    # should NOT override hardcoded sensitive processes.
+    from computer_use.safety import SensitiveProcessError
+    from computer_use.runtime_permissions import (
+        grant_window_exception,
+        clear_runtime_permissions,
+    )
+    grant_window_exception(process_name="keepass.exe", level="session")
+    with pytest.raises(SensitiveProcessError):
+        check_target_window("keepass.exe", None, None)
+    clear_runtime_permissions()

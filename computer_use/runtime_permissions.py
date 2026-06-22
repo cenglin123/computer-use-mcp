@@ -12,9 +12,16 @@ from pathlib import Path
 from typing import Any
 
 from computer_use.config import _default_config_path, load_config, reset_config_cache
-from computer_use.safety import _normalize_path  # reuse existing normalization
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_path(value: str) -> str:
+    """Normalize a path string for comparison (lowercase, forward slashes).
+
+    Duplicated from safety.py to avoid circular import. Keep in sync.
+    """
+    return value.lower().replace("\\", "/")
 
 # In-memory stores (session-scoped)
 _command_grants: dict[str, dict] = {}   # key = normalized name, value = {"level": str, "remaining": int | None}
