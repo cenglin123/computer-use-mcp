@@ -28,6 +28,9 @@ wheels/
 # Testing
 .pytest_cache/
 .coverage
+
+# Environment-specific recipes (not tracked — contains private coordinates/systems)
+docs/recipes/
 htmlcov/
 
 # IDEs
