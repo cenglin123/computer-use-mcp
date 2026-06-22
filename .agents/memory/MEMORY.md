@@ -34,6 +34,11 @@
 12. **每个工具响应都带 `timestamp`**：便于复盘时精确计算各步骤间隔，区分系统响应时间与 Agent 思考时间。
 13. **截图坐标绑定优先于裸坐标点击**：`screenshot` 写入 sidecar JSON（`<saved_path>.json`）记录 `capture_left`/`capture_top`/`coordinate_space`；Agent 应优先使用 `click_on_screenshot(screenshot_path, image_x, image_y)` 而非从缩放聊天预览估算裸 `click(x, y)`。小目标先用 `crop_screenshot` 裁剪放大（裁剪图继承坐标偏移）。映射后仍走完整安全链，副屏坐标被 `SafetyError` 拒绝。
 14. **SKILL 文案不要让 agent 自判模态**：SKILL/guidance 中反复出现 "text-only models should..." 会导致多模态模型自我怀疑、拒绝读图。正确做法是直接告诉 agent "读 saved_path 文件看界面"，仅在读取失败时才回退 UIA。不要让 agent 自问"我是不是 text-only"。
+15. **运行时权限白名单三层模型**：once（本次）/ session（本会话）/ permanent（写入 config.yaml）。Agent 遇到白名单拦截时自动询问用户，不硬编码白名单。硬编码敏感进程（keepass/certmgr）永远不可绕过。
+16. **隐私保护硬约束**：config.yaml 和 docs/recipes/ 目录加入 .gitignore，绝不推送到 GitHub。计划文档和代码中的公司名、真实路径、内部系统名（如中铝PRD）必须占位化。
+17. **Ultraverge 并行 Reviewer 策略**：安全/治理关键计划用 3 并行 Reviewer + 设计审查；非关键计划用单 Reviewer 评议。交叉命中（3/3 Reviewer 发现同一问题）是最强信号。
+18. **Fast-path batch 模式**：已验证的稳定桌面布局下，用 batch 一次性执行确定性操作（click+wait+type），reduce 视觉往返。仅用一次定向截图 + 一次最终验证截图。
+19. **裁剪标注比 whole-screenshot 更高效**：annotated_source_path 同时展示光标位置和裁剪区域，一次读图回答"鼠标在哪"和"裁了什么"两个问题。上下文开销远小于重截全屏。
 
 ## 参考文件
 

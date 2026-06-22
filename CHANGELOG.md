@@ -13,6 +13,24 @@
 #### 变更内容
 - Added docs/recipes/sap-logon-fast-path.md (local-only, not git-tracked). Added Fast Path After Validation section to computer-use SKILL.md. Created tests/manual/manual_test_checklist.md with SAP fast path performance smoke test section.
 
+### feat: 运行时权限白名单系统（once/session/permanent 三层）
+
+#### 变更内容
+- 新增 runtime_permissions 模块管理内存级权限；safety.py 集成运行时检查，硬编码敏感进程（keepass/certmgr）不可绕过；新增 add_command_whitelist 和 add_window_exception MCP 工具；config.py 内置 11 个默认系统命令（use_builtin_defaults 可关闭）；结构化错误响应（command_not_whitelisted / sensitive_window_blocked）；mcp_server.py 使用 SensitiveProcessError/SensitiveWindowError 子类替代正则解析。
+
+### feat: crop_screenshot 区域标注（red L-bracket + 坐标标签）
+
+#### 变更内容
+- snapshot.py 新增 annotate_region() 函数；crop_screenshot 默认在源截图上绘制红色 L 形角标，返回 annotated_source_path；新增 annotate/annotate_style 参数（可关闭）；标注失败不中断裁剪（best-effort）；SKILL.md 新增验证流程和上下文预算提示。
+
+### feat: 统一视觉标注（cursor 元数据 + annotation_layers）
+
+#### 变更内容
+- 截图 sidecar 新增 cursor 字段（screen/image 坐标+style）；crop_screenshot 响应新增 annotation_layers（cursor + crop_region 结构化数据）；annotated_source_path 同时包含光标十字和裁剪 L 角标；annotate_region 回归测试保证不破坏已有光标标记。
+
+
+
+
 ---
 
 ## 2026-06-21

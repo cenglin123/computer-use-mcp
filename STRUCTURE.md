@@ -11,6 +11,12 @@
 | Computer Use Skill | [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md)（源文件；`.agents/skills/computer-use/SKILL.md` 是分发副本，测试保证不漂移）|
 | 客户端配置示例 | [.agents/examples/clients/agent-prompt.md](.agents/examples/clients/agent-prompt.md) |
 | 已知环境陷阱 | [docs/pitfalls.md](docs/pitfalls.md) |
+| 运行时权限白名单设计 | [docs/plans/completed/runtime-permission-whitelist.md](docs/plans/completed/runtime-permission-whitelist.md) |
+| 裁剪区域标注设计 | [docs/plans/completed/crop-region-annotation.md](docs/plans/completed/crop-region-annotation.md) |
+| 统一视觉标注设计 | [docs/plans/completed/unified-visual-annotation.md](docs/plans/completed/unified-visual-annotation.md) |
+| SAP 快速路径设计 | [docs/plans/completed/cu-sap-fast-path-performance.md](docs/plans/completed/cu-sap-fast-path-performance.md) |
+| 收敛记录 | `.converge/done/`（各计划评议-收敛-审查完整链路）|
+| 本地配方（不追踪） | `docs/recipes/*.md`（`.gitignore` 排除，环境特定）|
 | 配置与命令白名单修复 | [docs/problems/bugfix/config-command-allowlist.md](docs/problems/bugfix/config-command-allowlist.md) |
 | 受控路径边界修复 | [docs/problems/bugfix/controlled-path-boundaries.md](docs/problems/bugfix/controlled-path-boundaries.md) |
 | 输入与截图安全修复 | [docs/problems/bugfix/input-screenshot-safety.md](docs/problems/bugfix/input-screenshot-safety.md) |
