@@ -8,11 +8,15 @@ This server is intended for multimodal agents. The MCP `screenshot` tool returns
 
 ## What it does
 
-- Takes screenshots of your desktop and returns saved local file paths to MCP clients.
-- Can also capture a single monitor via the `monitor` parameter.
-- Clicks, moves, scrolls, and types at physical virtual screen coordinates.
-- Presses key combinations like `ctrl+c`.
-- Enforces deterministic safety rules: dangerous commands, file deletions, and password fields are blocked.
+- Takes screenshots of your desktop and returns saved local file paths to MCP clients (never base64 in responses).
+- Clicks, moves, scrolls, and types at physical virtual screen coordinates, with deterministic safety enforcement.
+- Crops screenshots with automatic red L-bracket region annotation for visual verification.
+- Records structured cursor/region metadata (`annotation_layers`) to answer "where was the mouse?" and "what region did I crop?" in one read.
+- Finds UI controls via UI Automation (`find_control`, `get_ui_snapshot`, `click_by_uid`).
+- Waits for windows/controls to appear (`wait_for_window`, `wait_for_control`).
+- Launches apps by Start Menu / Desktop shortcut (`launch_app`) with runtime whitelist escalation.
+- Executes batched multi-step sequences in a single MCP call (`batch`, `run_task_plan`).
+- Audits execution with trace, task sessions, and retrospective reports (`start_task`, `review_task_session`, `save_review`).
 
 ## What it does NOT do
 
@@ -80,6 +84,7 @@ If you use [cc-switch](https://github.com/Cong-Cong-Man/ClaudeCodeSwitch) to man
    - **Type**: `stdio`
    - **Command**: the absolute path to this checkout's Python interpreter, e.g. `C:\Users\<you>\Projects\computer-use-mcp\.venv\Scripts\python.exe`
    - **Args**: `-m computer_use.mcp_server`
+   - **Env**: `PYTHONUTF8=1` (recommended on Chinese Windows to avoid encoding issues)
 5. Enable the clients you want (opencode, codex, gemini, etc.).
 6. Reactivate the MCP entry or restart the target client to pick up the latest code after updates.
 
@@ -156,9 +161,9 @@ Prefer MCP prompt `computer_use_guidance` when your client supports prompts. Age
 5. 执行真实 GUI 任务时，按这个闭环走：
 
    - `start_task(goal=...)` 创建业务任务会话，后续工具调用带上返回的 `task_id`。
-   - 先观察：优先 `screenshot` 和 `get_ui_snapshot`，不要凭空猜坐标。
-   - 再定位：能用 `find_control` / `click_control` 等 UIA 工具时优先用语义定位；UIA 不可用时再根据截图坐标操作。
-   - 再动作：多步操作优先用原生 `batch`，不要在 Bash/PowerShell 里手写脚本绕过 MCP。
+  - 先观察：优先 `screenshot` 和 `get_ui_snapshot`，不要凭空猜坐标。截图 sidecar 包含 cursor 元数据（screen/image 坐标），crop 后 `annotated_source_path` 同时展示光标和裁剪区域。
+  - 再定位：能用 `find_control` / `click_control` 等 UIA 工具时优先用语义定位；UIA 不可用时再根据截图坐标操作。小目标先用 `crop_screenshot` 放大。
+  - 再动作：多步操作优先用原生 `batch`，不要在 Bash/PowerShell 里手写脚本绕过 MCP。验证过的稳定桌面布局可用 fast-path batch 减少往返。
    - 再验证：每轮动作后截图或读取 snapshot，确认界面状态确实变化。
    - 最后复盘：用 `review_task_session(task_id)` 查看 trace、截图、artifact，再 `finish_task(task_id, summary=...)` 结束任务。
 
@@ -174,9 +179,10 @@ Prefer MCP prompt `computer_use_guidance` when your client supports prompts. Age
 注意事项：
 
 - 视觉 GUI 任务必须使用多模态模型；纯文本模型不能可靠地根据截图决定点击位置。
-- `screenshot` 返回的是本地 PNG 路径，不返回 base64；客户端或模型必须能读取该文件。
+- `screenshot` 返回的是本地 PNG 路径，不返回 base64；客户端或模型必须能读取该文件。`include_image=true` 可按需获得内联图片（且不代替文件路径）。
 - 鼠标键盘是真实输入设备，运行前确认当前机器无人手动操作鼠标键盘。
-- 不要绕过 `safety.py` 的坐标和窗口安全检查；遇到 `next_action` 时优先按返回建议修正。
+- 遇到 `command_not_whitelisted` 或 `sensitive_window_blocked` 时，Agent 会询问你是否添加白名单（once/session/permanent）。
+- `config.yaml` 和 `docs/recipes/` 不受 git 追踪（`.gitignore` 排除），包含本机特定配置和配方，不会推送到 GitHub。
 
 ## Coordinate system
 
@@ -195,15 +201,21 @@ will fail fast in the MVP.
 
 ## Tools
 
-| Tool | Description |
-|------|-------------|
-| `screenshot` | Capture the virtual desktop or one monitor and return a saved PNG path. |
-| `get_monitors` | Return all monitors with index, primary flag, and bounds. |
-| `click` | Click at physical virtual screen coordinates. |
-| `move_to` | Move cursor to physical virtual screen coordinates. |
-| `scroll` | Scroll wheel by amount, optionally at coordinates. |
-| `type` | Type text. |
-| `key_combo` | Press key combination. |
+The server exposes 42 tools organized into categories:
+
+| Category | Key tools |
+|----------|-----------|
+| Observe | `screenshot`, `get_ui_snapshot`, `get_monitors`, `find_control`, `inspect_point` |
+| Visual click | `click_on_screenshot`, `crop_screenshot` (with red L-bracket annotation) |
+| Raw input | `click`, `move_to`, `type`, `key_combo`, `press_key`, `scroll`, `drag`, `mouse_down/up` |
+| Composite | `open_menu`, `fill_form`, `scroll_until` |
+| Batch | `batch`, `run_task_plan` |
+| Task audit | `start_task`, `finish_task`, `review_task`, `review_task_session`, `save_review` |
+| Wait | `wait_for_window`, `wait_for_control`, `sleep` |
+| Launch | `launch_app`, `activate_window` |
+| Security | `add_command_whitelist`, `add_window_exception` |
+
+For the full tool reference with parameters and descriptions, see [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md) or load the `computer_use_guidance` MCP prompt.
 
 ## Local debug CLI
 
@@ -240,7 +252,10 @@ python -m computer_use key ctrl c
 
 - Dangerous shell commands and file deletions are blocked.
 - Password controls are detected via UI Automation and refused.
-- Sensitive application processes/window classes are blocked.
+- Sensitive application processes (keepass, certmgr, etc.) and window classes (`#32770`) are protected. Hardcoded sensitive processes are NEVER bypassable.
+- **Runtime permission escalation**: when a command or window is blocked, the agent can ask the user to grant a one-time (`once`), session-scoped (`session`), or permanent (`permanent`) exception via `add_command_whitelist` / `add_window_exception`.
+- Built-in defaults (`use_builtin_defaults: true`) allow common system apps (notepad, calc, explorer, etc.) automatically. Set to `false` for strict whitelist-only mode.
+- Screenshots can optionally redact when sensitive windows are detected in the capture region.
 - All actions are logged to `~/.computer-use/logs/computer-use.log` with rotation by default.
 
 ## Configuration
@@ -254,9 +269,12 @@ Use `config.yaml` in this repository as a template to customize logging,
 screenshot, trace, task, display, and safety settings. MCP client config files
 are only for registering the server process with that client.
 
-If `launch_app` returns a whitelist error, copy `config.example.yaml` to
-`~/.computer-use/config.yaml` and add the target application to
-`safety.allowed_commands`. Sensitive processes are blocked even if listed.
+If `launch_app` returns a whitelist error, you have three options:
+1. **Runtime grant**: the agent asks your permission and calls `add_command_whitelist(command, level="once|session|permanent")`.
+2. **Edit config**: add the command path to `safety.allowed_commands` in `~/.computer-use/config.yaml`. Built-in defaults (notepad, calc, etc.) are already allowed unless `use_builtin_defaults` is `false`.
+3. **Permanent grant**: `add_command_whitelist(command, level="permanent")` writes directly to config.yaml.
+
+Sensitive processes (keepass, certmgr, 1password, lastpass, mmc) are always blocked regardless of whitelist entries.
 
 ## 文档
 
@@ -266,6 +284,8 @@ If `launch_app` returns a whitelist error, copy `config.example.yaml` to
 | [docs/api.md](docs/api.md) | MCP 工具约定 |
 | [docs/deployment.md](docs/deployment.md) | 部署与环境配置 |
 | [docs/pitfalls.md](docs/pitfalls.md) | 已知环境陷阱 |
+| [skills/computer-use/SKILL.md](skills/computer-use/SKILL.md) | Agent 使用纪律（完整工具表 + 验证流程 + 安全规则） |
+| [STRUCTURE.md](STRUCTURE.md) | 文档索引 |
 | [CHANGELOG.md](CHANGELOG.md) | 变更记录 |
 
 ## AI Agent 协作
