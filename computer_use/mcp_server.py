@@ -1435,6 +1435,8 @@ def _handle_crop_screenshot(
     y = args["y"]
     crop_width = args["width"]
     crop_height = args["height"]
+    annotate = args.get("annotate", True)
+    annotate_style = args.get("annotate_style", "corner_brackets")
 
     meta = _read_screenshot_metadata(screenshot_path)
     if meta is None:
@@ -1482,12 +1484,33 @@ def _handle_crop_screenshot(
         "height": crop_height,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
     }
+
+    # Non-destructive annotation of source
+    annotated_path = None
+    if annotate:
+        try:
+            from computer_use.snapshot import annotate_region
+
+            annotated_path = annotate_region(
+                str(screenshot_path),
+                x,
+                y,
+                crop_width,
+                crop_height,
+                style=annotate_style,
+            )
+            crop_meta["annotated_source_path"] = annotated_path
+        except Exception as exc:
+            logging.warning(
+                "crop annotation failed for %s: %s", screenshot_path, exc
+            )
+
     crop_meta_path = crop_path + ".json"
     Path(crop_meta_path).write_text(
         json.dumps(crop_meta, ensure_ascii=False), encoding="utf-8"
     )
 
-    return json.dumps({
+    response = {
         "cropped": True,
         "saved_path": crop_path,
         "metadata_path": crop_meta_path,
@@ -1496,7 +1519,11 @@ def _handle_crop_screenshot(
         "capture_top": crop_capture_top,
         "width": crop_width,
         "height": crop_height,
-    })
+    }
+    if annotated_path is not None:
+        response["annotated_source_path"] = annotated_path
+
+    return json.dumps(response)
 
 
 def _current_logical_position() -> tuple[int, int]:

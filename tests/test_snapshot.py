@@ -455,3 +455,66 @@ def test_click_by_uid_uses_defaults(monkeypatch, _fake_tree) -> None:
 
     snapshot_mod.click_by_uid(target["uid"], snapshot)
     assert click_calls == [(45, 30, 0.2, "left")]
+
+
+class TestAnnotateRegion:
+    def test_annotate_region_does_not_mutate_source(self, tmp_path):
+        from PIL import Image
+        from computer_use.snapshot import annotate_region
+
+        src = tmp_path / "src.png"
+        Image.new("RGB", (400, 300), color=(50, 80, 110)).save(src)
+        original_bytes = src.read_bytes()
+
+        annotate_region(str(src), x=50, y=40, width=120, height=80)
+
+        assert src.read_bytes() == original_bytes, "source PNG must not be modified"
+
+    def test_annotate_region_returns_new_path(self, tmp_path):
+        from PIL import Image
+        from computer_use.snapshot import annotate_region
+
+        src = tmp_path / "src.png"
+        Image.new("RGB", (400, 300), color=(50, 80, 110)).save(src)
+
+        out_path = annotate_region(str(src), x=50, y=40, width=120, height=80)
+
+        assert out_path != str(src)
+        assert out_path.endswith("_annotated.png")
+        assert Path(out_path).exists()
+
+    def test_annotate_region_changes_pixels_inside_crop(self, tmp_path):
+        from PIL import Image
+        from computer_use.snapshot import annotate_region
+
+        src = tmp_path / "src.png"
+        Image.new("RGB", (400, 300), color=(50, 80, 110)).save(src)
+
+        out_path = annotate_region(str(src), x=50, y=40, width=120, height=80)
+        img = Image.open(out_path)
+        px = img.getpixel((60, 41))
+        assert px[0] > 200 and px[1] < 50 and px[2] < 50, f"expected red, got {px}"
+
+    def test_annotate_region_leaves_outside_crop_untouched(self, tmp_path):
+        from PIL import Image
+        from computer_use.snapshot import annotate_region
+
+        src = tmp_path / "src.png"
+        Image.new("RGB", (400, 300), color=(50, 80, 110)).save(src)
+
+        out_path = annotate_region(str(src), x=100, y=100, width=50, height=50)
+        img = Image.open(out_path)
+        px = img.getpixel((10, 10))
+        assert px == (50, 80, 110), f"outside crop should be unchanged, got {px}"
+
+    def test_annotate_region_handles_bracket_arm_pixel(self, tmp_path):
+        from PIL import Image
+        from computer_use.snapshot import annotate_region
+
+        src = tmp_path / "src.png"
+        Image.new("RGB", (400, 300), color=(255, 255, 255)).save(src)
+
+        out_path = annotate_region(str(src), x=100, y=100, width=80, height=60)
+        img = Image.open(out_path)
+        px = img.getpixel((180, 155))
+        assert px[0] > 200, f"expected red vertical arm, got {px}"

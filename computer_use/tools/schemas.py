@@ -145,7 +145,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="crop_screenshot",
-        description="Crop a region from a saved screenshot, preserving coordinate metadata for click_on_screenshot. Use to zoom in on small targets.",
+        description="Crop a region from a saved screenshot, preserving coordinate metadata for click_on_screenshot. Use to zoom in on small targets. By default also writes a non-destructive annotated copy of the source with the crop region outlined in red, returned as `annotated_source_path` so models can visually verify the region before reading the cropped content.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -154,6 +154,21 @@ TOOLS: list[Tool] = [
                 "y": {"type": "integer", "description": "Top edge in image pixels."},
                 "width": {"type": "integer"},
                 "height": {"type": "integer"},
+                "annotate": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "If true, write a red L-bracket annotated copy of the source to <source>_annotated.png and return its path. Default true. Set false to skip annotation.",
+                },
+                "annotate_style": {
+                    "type": "string",
+                    "enum": ["corner_brackets"],
+                    "default": "corner_brackets",
+                    "description": "Annotation marker style. Currently only `corner_brackets` is supported.",
+                },
+                "task_id": {
+                    "type": "string",
+                    "description": "Optional business task session ID returned by start_task.",
+                },
             },
             "required": ["screenshot_path", "x", "y", "width", "height"],
         },

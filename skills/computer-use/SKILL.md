@@ -32,7 +32,7 @@ If reading the screenshot file yields no visual content, fall back to structured
 | | `find_control` | `name`, `scope`, `control_type?` | Locate a UI element, return center coords |
 | | `inspect_point` | `x`, `y` | What control is under this screen coordinate? |
 | **Click (visual)** | `click_on_screenshot` | `screenshot_path`, `image_x`, `image_y` | Map image pixels → screen coords, full safety chain |
-| | `crop_screenshot` | `screenshot_path`, `x`, `y`, `width`, `height` | Zoom into small target, preserves coordinate mapping |
+| | `crop_screenshot` | `screenshot_path`, `x`, `y`, `width`, `height`, `annotate?`, `annotate_style?` | Zoom into small target, preserves coordinate mapping. By default also writes `<source>_annotated.png` with red L-bracket markers so the agent can visually verify the cropped region before reading the crop content. |
 | **Click (raw)** | `click` | `x`, `y`, `button?`, `double_click?` | Primary-screen physical coordinates only |
 | | `move_to` | `x`, `y` | Move cursor without clicking |
 | | `click_by_uid` | `uid`, `snapshot` | Click a snapshot-identified control |
@@ -83,6 +83,16 @@ If reading the screenshot file yields no visual content, fall back to structured
 2. {"tool": "crop_screenshot", "args": {"screenshot_path": "<path>", "x": 180, "y": 30, "width": 120, "height": 50}}
 3. {"tool": "click_on_screenshot", "args": {"screenshot_path": "<crop_path>", "image_x": 33, "image_y": 18}}
 ```
+
+### Verifying crop region before relying on cropped content
+
+When a crop returns unreadable content (uniform color, looks like desktop background, doesn't match expected UI element), do not blindly retry with a different region estimate. Instead:
+
+1. Read the `annotated_source_path` returned by `crop_screenshot`.
+2. Confirm the red L-brackets in that annotated image actually surround the intended control.
+3. If brackets miss the target, re-measure from the source screenshot, then call `crop_screenshot` again with corrected coordinates.
+
+The annotated image is non-destructive — the original source PNG is never overwritten, so the agent can repeatedly crop from the same source and inspect each annotation. Set `annotate: false` to skip the sidecar write when not needed (e.g. when cropping in tight performance-sensitive loops).
 
 ### Mechanical batch (after target confirmed)
 
@@ -185,6 +195,7 @@ Large screenshots, UIA JSON, and base64 image data accumulate in context and deg
 Each full-screen screenshot (whether read via the file tool or returned with `include_image=true`) is ~2-4 MB of image data that **stays in the conversation for the rest of the session**. Per-turn latency scales with the accumulated image payload, so a long task gets progressively slower. Keep the running total small:
 
 - **Crop after orienting.** Take at most one full-screen screenshot to locate the target; for every subsequent observation use `crop_screenshot` (or screenshot then crop) and reason about the small region. A 300x120 crop is a tiny fraction of a 1920x1080 frame in context — this is the single biggest lever you control.
+- **Crop annotated source on disambiguation.** When a cropped image is ambiguous or appears empty, re-read the `annotated_source_path` to confirm the crop region was correct before trying alternative coordinates. This is far cheaper than re-screenshotting the whole screen.
 - **One observation per state change.** Do not re-screenshot when nothing changed. Verify with the cursor marker on a crop, not a fresh full frame, when possible.
 - **One task per session.** Old screenshots from a finished task keep costing tokens on every later turn. Start a fresh session for a new task instead of piling tasks into one long conversation.
 - **Keep turns flowing.** Prompt caching expires after a few minutes idle; a long pause forces the next turn to reprocess the whole accumulated context (including every retained image) as fresh, expensive input. The slow turns in a long session are usually these cache misses, not any single tool call.

@@ -311,3 +311,93 @@ def click_by_uid(
                 "duration": duration,
             }
     return {"error": "stale_uid"}
+
+
+# crop annotation — see plans/active/crop-region-annotation.md
+DEFAULT_BRACKET_ARM_PX = 24
+DEFAULT_BRACKET_WIDTH_PX = 3
+ANNOTATION_COLOR = (255, 0, 0)
+_annotation_font = None  # lazy-loaded
+
+
+def _get_annotation_font():
+    """Lazy-load PIL default font (cached)."""
+    global _annotation_font
+    if _annotation_font is None:
+        from PIL import ImageFont
+        _annotation_font = ImageFont.load_default()
+    return _annotation_font
+
+
+def annotate_region(
+    source_path: str,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    *,
+    style: str = "corner_brackets",
+    arm_length: int = DEFAULT_BRACKET_ARM_PX,
+    line_width: int = DEFAULT_BRACKET_WIDTH_PX,
+) -> str:
+    """Draw a red region marker on a copy of the source image. Non-destructive.
+
+    Args:
+        source_path: Path to the source PNG. Not modified.
+        x, y, width, height: Region in source image pixels.
+        style: Marker style. Currently only "corner_brackets" is supported.
+        arm_length: Length of each L-bracket arm in pixels.
+        line_width: Stroke width in pixels.
+
+    Returns:
+        Path to the annotated PNG (a sibling file with ``_annotated`` suffix).
+    """
+    if style != "corner_brackets":
+        raise ValueError(f"unsupported annotation style: {style!r}")
+
+    from PIL import Image, ImageDraw
+
+    src = Image.open(source_path)
+    if src.mode != "RGB":
+        src = src.convert("RGB")
+
+    x2, y2 = x + width, y + height
+    if x < 0 or y < 0 or x2 > src.width or y2 > src.height:
+        raise ValueError(
+            f"region ({x},{y},{width},{height}) out of source bounds "
+            f"({src.width}x{src.height})"
+        )
+
+    annotated = src.copy()
+    draw = ImageDraw.Draw(annotated)
+    color = ANNOTATION_COLOR
+    L = arm_length
+    W = line_width
+
+    # Top-left corner
+    draw.line([(x, y), (x + L, y)], fill=color, width=W)
+    draw.line([(x, y), (x, y + L)], fill=color, width=W)
+    # Top-right
+    draw.line([(x2, y), (x2 - L, y)], fill=color, width=W)
+    draw.line([(x2, y), (x2, y + L)], fill=color, width=W)
+    # Bottom-left
+    draw.line([(x, y2), (x + L, y2)], fill=color, width=W)
+    draw.line([(x, y2), (x, y2 - L)], fill=color, width=W)
+    # Bottom-right
+    draw.line([(x2, y2), (x2 - L, y2)], fill=color, width=W)
+    draw.line([(x2, y2), (x2, y2 - L)], fill=color, width=W)
+
+    # Coordinate label (top-left inside crop, white shadow for legibility)
+    label = f"({x},{y},{width},{height})"
+    font = _get_annotation_font()
+    label_x = x + 6
+    label_y = y + 6
+    for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+        draw.text((label_x + dx, label_y + dy), label, fill=(255, 255, 255), font=font)
+    draw.text((label_x, label_y), label, fill=color, font=font)
+
+    # Output path: <source>_annotated.png in same directory
+    src_path = Path(source_path)
+    annotated_path = src_path.with_name(f"{src_path.stem}_annotated.png")
+    annotated.save(str(annotated_path))
+    return str(annotated_path)

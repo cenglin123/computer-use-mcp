@@ -2890,3 +2890,114 @@ def test_coordinate_value_error_includes_next_action(monkeypatch) -> None:
     assert "coordinates" in data["error"].lower() or "bounds" in data["error"].lower()
     assert "next_action" in data
     assert "get_monitors" in data["next_action"] or "inspect_point" in data["next_action"]
+
+
+def test_crop_screenshot_emits_annotated_source(monkeypatch, tmp_path) -> None:
+    import computer_use.mcp_server as server
+    from PIL import Image
+
+    shot_path = tmp_path / "shot.png"
+    Image.new("RGB", (1920, 1080), color=(100, 150, 200)).save(shot_path)
+    # Write sidecar
+    sidecar = {"schema_version": 1, "screenshot_path": str(shot_path), "monitor": 1, "coordinate_space": "monitor", "capture_left": 0, "capture_top": 0, "width": 1920, "height": 1080}
+    import json as _json
+    (tmp_path / "shot.png.json").write_text(_json.dumps(sidecar))
+    monkeypatch.setattr(server, "load_config", lambda: {"screenshot_dir": str(tmp_path), "safety": {"screenshot_sensitive_window_check": False}})
+
+    data = _json.loads(
+        server._call_tool(
+            "crop_screenshot",
+            {"screenshot_path": str(shot_path), "x": 50, "y": 60, "width": 360, "height": 120},
+        )
+    )
+
+    assert "annotated_source_path" in data
+    annotated_path = Path(data["annotated_source_path"])
+    assert annotated_path.exists()
+    assert annotated_path.name == "shot_annotated.png"
+
+    # Source unchanged
+    src_img = Image.open(shot_path)
+    assert src_img.getpixel((100, 80)) == (100, 150, 200)
+
+    # Annotated has red pixels
+    annotated_img = Image.open(annotated_path)
+    px = annotated_img.getpixel((60, 61))
+    assert px[0] > 200 and px[1] < 50, f"expected red bracket pixel, got {px}"
+
+
+def test_crop_screenshot_annotate_false_skips_annotation(monkeypatch, tmp_path) -> None:
+    import computer_use.mcp_server as server
+    from PIL import Image
+
+    shot_path = tmp_path / "shot.png"
+    Image.new("RGB", (100, 100), color=(50, 50, 50)).save(shot_path)
+    sidecar = {"schema_version": 1, "screenshot_path": str(shot_path), "monitor": 1, "coordinate_space": "monitor", "capture_left": 0, "capture_top": 0, "width": 100, "height": 100}
+    import json as _json
+    (tmp_path / "shot.png.json").write_text(_json.dumps(sidecar))
+    monkeypatch.setattr(server, "load_config", lambda: {"screenshot_dir": str(tmp_path), "safety": {"screenshot_sensitive_window_check": False}})
+
+    data = _json.loads(
+        server._call_tool(
+            "crop_screenshot",
+            {"screenshot_path": str(shot_path), "x": 10, "y": 10, "width": 50, "height": 50, "annotate": False},
+        )
+    )
+
+    assert data["cropped"] is True
+    assert data.get("annotated_source_path") in (None, "")
+    assert not (tmp_path / "shot_annotated.png").exists()
+
+
+def test_crop_screenshot_annotation_does_not_affect_existing_fields(monkeypatch, tmp_path) -> None:
+    import computer_use.mcp_server as server
+    from PIL import Image
+
+    shot_path = tmp_path / "shot.png"
+    Image.new("RGB", (1920, 1080), color=(100, 150, 200)).save(shot_path)
+    sidecar = {"schema_version": 1, "screenshot_path": str(shot_path), "monitor": 1, "coordinate_space": "monitor", "capture_left": 100, "capture_top": 200, "width": 1920, "height": 1080}
+    import json as _json
+    (tmp_path / "shot.png.json").write_text(_json.dumps(sidecar))
+    monkeypatch.setattr(server, "load_config", lambda: {"screenshot_dir": str(tmp_path), "safety": {"screenshot_sensitive_window_check": False}})
+
+    data = _json.loads(
+        server._call_tool(
+            "crop_screenshot",
+            {"screenshot_path": str(shot_path), "x": 50, "y": 60, "width": 360, "height": 120},
+        )
+    )
+
+    assert data["cropped"] is True
+    assert data["capture_left"] == 150
+    assert data["capture_top"] == 260
+    assert data["width"] == 360
+    assert data["height"] == 120
+    assert data["saved_path"]
+    assert data["metadata_path"]
+    assert data["source_screenshot_path"] == str(shot_path)
+
+
+def test_crop_screenshot_annotation_failure_is_best_effort(monkeypatch, tmp_path) -> None:
+    """Annotation failure must NOT break the crop."""
+    import computer_use.mcp_server as server
+    from PIL import Image
+
+    shot_path = tmp_path / "shot.png"
+    Image.new("RGB", (400, 300), color=(50, 50, 50)).save(shot_path)
+    sidecar = {"schema_version": 1, "screenshot_path": str(shot_path), "monitor": 1, "coordinate_space": "monitor", "capture_left": 0, "capture_top": 0, "width": 400, "height": 300}
+    import json as _json
+    (tmp_path / "shot.png.json").write_text(_json.dumps(sidecar))
+    monkeypatch.setattr(server, "load_config", lambda: {"screenshot_dir": str(tmp_path), "safety": {"screenshot_sensitive_window_check": False}})
+    # Force annotation failure
+    monkeypatch.setattr("computer_use.snapshot.annotate_region", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("simulated")))
+
+    data = _json.loads(
+        server._call_tool(
+            "crop_screenshot",
+            {"screenshot_path": str(shot_path), "x": 10, "y": 10, "width": 50, "height": 50},
+        )
+    )
+
+    assert data["cropped"] is True
+    assert "annotated_source_path" not in data or data.get("annotated_source_path") is None
+    assert Path(data["saved_path"]).exists()
