@@ -94,6 +94,8 @@ When a crop returns unreadable content (uniform color, looks like desktop backgr
 
 The annotated image is non-destructive — the original source PNG is never overwritten, so the agent can repeatedly crop from the same source and inspect each annotation. Set `annotate: false` to skip the sidecar write when not needed (e.g. when cropping in tight performance-sensitive loops).
 
+`annotated_source_path` is the canonical one-image verification artifact. When the source is an MCP screenshot, it contains both visual layers: the red cursor crosshair from the screenshot and the red crop-region marker from `crop_screenshot`. Use it to answer both questions at once: "where was the mouse?" and "what region did I crop?"
+
 ### Mechanical batch (after target confirmed)
 
 ```json

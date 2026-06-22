@@ -145,7 +145,7 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="crop_screenshot",
-        description="Crop a region from a saved screenshot, preserving coordinate metadata for click_on_screenshot. Use to zoom in on small targets. By default also writes a non-destructive annotated copy of the source with the crop region outlined in red, returned as `annotated_source_path` so models can visually verify the region before reading the cropped content.",
+        description="Crop a region from a saved screenshot, preserving coordinate metadata for click_on_screenshot. Use to zoom in on small targets. By default also writes a non-destructive annotated copy of the source. For MCP screenshots this annotated image contains both the source screenshot's red cursor crosshair and the crop region's red L-bracket marker, returned as `annotated_source_path`.",
         inputSchema={
             "type": "object",
             "properties": {

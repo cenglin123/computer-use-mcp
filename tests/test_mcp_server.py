@@ -3001,3 +3001,72 @@ def test_crop_screenshot_annotation_failure_is_best_effort(monkeypatch, tmp_path
     assert data["cropped"] is True
     assert "annotated_source_path" not in data or data.get("annotated_source_path") is None
     assert Path(data["saved_path"]).exists()
+
+
+def test_screenshot_sidecar_records_cursor_image_position(monkeypatch, tmp_path):
+    import json
+    import computer_use.mcp_server as server
+
+    config = _minimal_config(str(tmp_path))
+    monkeypatch.setattr(server, "load_config", lambda: config)
+    monkeypatch.setattr(server.pyautogui, "position", lambda: (25, 35))
+
+    data = json.loads(_call_tool("screenshot", {"monitor": 1}))
+    meta = json.loads(Path(data["metadata_path"]).read_text(encoding="utf-8"))
+
+    assert meta["cursor"]["screen_x"] == 25
+    assert meta["cursor"]["screen_y"] == 35
+    assert meta["cursor"]["image_x"] == 25
+    assert meta["cursor"]["image_y"] == 35
+    assert meta["cursor"]["style"] == "red_crosshair"
+
+
+def test_crop_screenshot_returns_unified_annotation_layers(monkeypatch, tmp_path):
+    import json
+    import computer_use.mcp_server as server
+
+    shot_path = tmp_path / "shot.png"
+    _create_real_png(shot_path, 1920, 1080)
+    _write_screenshot_sidecar(
+        shot_path,
+        capture_left=0,
+        capture_top=0,
+        width=1920,
+        height=1080,
+        cursor={
+            "screen_x": 500,
+            "screen_y": 300,
+            "image_x": 500,
+            "image_y": 300,
+            "present": True,
+            "style": "red_crosshair",
+        },
+    )
+    monkeypatch.setattr(server, "load_config", lambda: _minimal_config(str(tmp_path)))
+
+    data = json.loads(
+        _call_tool(
+            "crop_screenshot",
+            {
+                "screenshot_path": str(shot_path),
+                "x": 400,
+                "y": 250,
+                "width": 160,
+                "height": 90,
+            },
+        )
+    )
+
+    layers = data["annotation_layers"]
+    assert layers["cursor"]["present"] is True
+    assert layers["cursor"]["image_x"] == 500
+    assert layers["cursor"]["image_y"] == 300
+    assert layers["cursor"]["style"] == "red_crosshair"
+    assert layers["crop_region"] == {
+        "present": True,
+        "x": 400,
+        "y": 250,
+        "width": 160,
+        "height": 90,
+        "style": "corner_brackets",
+    }

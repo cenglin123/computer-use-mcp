@@ -518,3 +518,22 @@ class TestAnnotateRegion:
         img = Image.open(out_path)
         px = img.getpixel((180, 155))
         assert px[0] > 200, f"expected red vertical arm, got {px}"
+
+
+def test_annotate_region_preserves_existing_cursor_crosshair(tmp_path):
+    from PIL import Image, ImageDraw
+    from computer_use.snapshot import annotate_region
+
+    src = tmp_path / "source.png"
+    img = Image.new("RGB", (300, 200), color=(50, 80, 110))
+    draw = ImageDraw.Draw(img)
+    draw.line([(130, 100), (170, 100)], fill=(255, 0, 0), width=2)
+    draw.line([(150, 80), (150, 120)], fill=(255, 0, 0), width=2)
+    draw.ellipse([(147, 97), (153, 103)], fill=(255, 0, 0))
+    img.save(src)
+
+    annotated_path = annotate_region(str(src), 20, 20, 80, 60)
+    annotated = Image.open(annotated_path)
+
+    assert annotated.getpixel((150, 100))[0] > 200
+    assert annotated.getpixel((150, 100))[1] < 50

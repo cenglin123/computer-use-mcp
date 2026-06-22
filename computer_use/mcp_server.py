@@ -590,6 +590,13 @@ def _dispatch_tool(
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         }
 
+        # Record cursor position before screenshot save — matches what
+        # save_screenshot() will draw. Capturing after save_screenshot()
+        # could give a different position if the user moves the mouse.
+        cursor_screen_x, cursor_screen_y = pyautogui.position()
+        cursor_image_x = cursor_screen_x - capture_left
+        cursor_image_y = cursor_screen_y - capture_top
+
         try:
             if sensitive:
                 saved = save_redacted_image(save_path, width, height)
@@ -616,6 +623,14 @@ def _dispatch_tool(
             "width": width,
             "height": height,
             "created_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+            "cursor": {
+                "screen_x": int(cursor_screen_x),
+                "screen_y": int(cursor_screen_y),
+                "image_x": int(cursor_image_x),
+                "image_y": int(cursor_image_y),
+                "present": 0 <= cursor_image_x < width and 0 <= cursor_image_y < height,
+                "style": "red_crosshair",
+            },
         }
         metadata_path = str(saved) + ".json"
         Path(metadata_path).write_text(
@@ -1505,6 +1520,28 @@ def _handle_crop_screenshot(
                 "crop annotation failed for %s: %s", screenshot_path, exc
             )
 
+    # Build unified annotation layers metadata
+    source_cursor = meta.get("cursor", {})
+    annotation_layers = {
+        "cursor": {
+            "present": bool(source_cursor.get("present", False)),
+            "image_x": source_cursor.get("image_x"),
+            "image_y": source_cursor.get("image_y"),
+            "screen_x": source_cursor.get("screen_x"),
+            "screen_y": source_cursor.get("screen_y"),
+            "style": source_cursor.get("style", "red_crosshair"),
+        },
+        "crop_region": {
+            "present": True,  # crop always succeeds if we reach here
+            "x": x,
+            "y": y,
+            "width": crop_width,
+            "height": crop_height,
+            "style": annotate_style,
+        },
+    }
+    crop_meta["annotation_layers"] = annotation_layers
+
     crop_meta_path = crop_path + ".json"
     Path(crop_meta_path).write_text(
         json.dumps(crop_meta, ensure_ascii=False), encoding="utf-8"
@@ -1523,6 +1560,7 @@ def _handle_crop_screenshot(
     if annotated_path is not None:
         response["annotated_source_path"] = annotated_path
 
+    response["annotation_layers"] = annotation_layers
     return json.dumps(response)
 
 
