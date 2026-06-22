@@ -6,6 +6,15 @@
 - 当前工作状态写在 docs/CURRENT.md；CHANGELOG 只记录历史变更。
 -->
 
+## 2026-06-22
+
+### docs: SAP fast-path recipe, skill update, and smoke test checklist
+
+#### 变更内容
+- Added docs/recipes/sap-logon-fast-path.md (local-only, not git-tracked). Added Fast Path After Validation section to computer-use SKILL.md. Created tests/manual/manual_test_checklist.md with SAP fast path performance smoke test section.
+
+---
+
 ## 2026-06-21
 
 ### feat: 强制 task_id 守卫、拦截高成本快照与内联输出预算

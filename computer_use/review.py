@@ -130,6 +130,7 @@ def review_task_session(task_id: str, detail: bool = False) -> dict[str, Any]:
     reviewed_traces: list[dict[str, Any]] = []
     error_distribution: dict[str, int] = {}
     total_steps = 0
+    trace_data_for_timing: list[dict[str, Any]] = []
     for link in task.get("traces", []):
         trace_id = link.get("trace_id")
         if not isinstance(trace_id, str):
@@ -142,8 +143,15 @@ def review_task_session(task_id: str, detail: bool = False) -> dict[str, Any]:
         for kind, count in trace_review.get("error_distribution", {}).items():
             error_distribution[kind] = error_distribution.get(kind, 0) + count
         reviewed_traces.append({**link, "review": trace_review})
+        # Collect timing data for breakdown
+        trace_data_for_timing.append({
+            "trace_id": trace_id,
+            "started_at": link.get("started_at"),
+            "finished_at": link.get("finished_at"),
+            "total_duration_ms": trace_review["summary"].get("total_duration_ms", 0),
+        })
 
-    return {
+    result = {
         "task_id": task_id,
         "goal": task.get("goal"),
         "status": task.get("status"),
@@ -153,4 +161,35 @@ def review_task_session(task_id: str, detail: bool = False) -> dict[str, Any]:
         "total_steps": total_steps,
         "error_distribution": error_distribution,
         "traces": reviewed_traces,
+        "timing_breakdown": _summarize_timing(trace_data_for_timing),
+    }
+    return result
+
+
+def _summarize_timing(traces: list[dict[str, Any]]) -> dict[str, Any]:
+    """Calculate wall-clock, tool duration, and agent gap time from a list of trace timing records.
+
+    All durations are in milliseconds.
+    """
+    if not traces:
+        return {
+            "trace_count": 0,
+            "tool_duration_ms": 0,
+            "wall_clock_duration_ms": 0,
+            "agent_gap_duration_ms": 0,
+            "agent_gap_ratio": 0.0,
+        }
+
+    starts = [_parse_timestamp(t["started_at"]) for t in traces if t.get("started_at")]
+    ends = [_parse_timestamp(t["finished_at"]) for t in traces if t.get("finished_at")]
+    wall_clock_ms = int((max(ends) - min(starts)).total_seconds() * 1000) if starts and ends else 0
+    tool_ms = sum(int(t.get("total_duration_ms", 0)) for t in traces)
+    gap_ms = max(0, wall_clock_ms - tool_ms)
+
+    return {
+        "trace_count": len(traces),
+        "tool_duration_ms": tool_ms,
+        "wall_clock_duration_ms": wall_clock_ms,
+        "agent_gap_duration_ms": gap_ms,
+        "agent_gap_ratio": (gap_ms / wall_clock_ms) if wall_clock_ms else 0.0,
     }

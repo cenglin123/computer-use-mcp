@@ -122,6 +122,18 @@ The annotated image is non-destructive — the original source PNG is never over
 
 After `start_task`, every subsequent executable computer-use tool call must include the returned `task_id`. If an explicit task is active, tools without `task_id` are rejected with `missing_task_id`.
 
+## Fast Path After Validation
+
+Once a workflow has been successfully validated on a stable desktop layout, do not repeat the full exploratory loop on every run. Use this faster pattern:
+
+1. Take one orientation screenshot.
+2. If known preconditions are still true, run deterministic actions in `batch`.
+3. Use event waits (`wait_for_window`, `wait_for_control`) instead of fixed `sleep` where possible.
+4. Take one final screenshot or crop for verification.
+5. Fall back to the standard loop only if a wait times out, a final screenshot does not match expected state, or coordinates no longer hit the target.
+
+For validated desktop workflows, see `docs/recipes/*.md` (local files — not in GitHub repo; created by the user during setup).
+
 ## Safety Rules
 
 - Check monitor bounds with `get_monitors` when coordinates are uncertain.
