@@ -26,13 +26,13 @@ If reading the screenshot file yields no visual content, fall back to structured
 
 | Category | Tool | Key params | Purpose |
 |----------|------|-----------|---------|
-| **Observe** | `screenshot` | `monitor=1`, `save_path?` | Save PNG, return path + coordinate metadata |
+| **Observe** | `screenshot` | `monitor=1`, `save_path?` | Save PNG, return path + coordinate metadata + `cursor` object (screen_x, screen_y, image_x, image_y, present, style) |
 | | `get_ui_snapshot` | `scope=foreground`, `include_screenshot=false` | UIA tree of controls (avoid `desktop`+`screenshot`) |
 | | `get_monitors` | — | Physical bounds of all displays |
 | | `find_control` | `name`, `scope`, `control_type?` | Locate a UI element, return center coords |
 | | `inspect_point` | `x`, `y` | What control is under this screen coordinate? |
 | **Click (visual)** | `click_on_screenshot` | `screenshot_path`, `image_x`, `image_y` | Map image pixels → screen coords, full safety chain |
-| | `crop_screenshot` | `screenshot_path`, `x`, `y`, `width`, `height`, `annotate?`, `annotate_style?` | Zoom into small target, preserves coordinate mapping. By default also writes `<source>_annotated.png` with red L-bracket markers so the agent can visually verify the cropped region before reading the crop content. |
+| | `crop_screenshot` | `screenshot_path`, `x`, `y`, `width`, `height`, `annotate?`, `annotate_style?` | Zoom into small target, preserves coordinate mapping. Returns `annotated_source_path` (canonical annotated image with cursor crosshair + crop brackets) and `annotation_layers` (structured `cursor` and `crop_region` objects). |
 | **Click (raw)** | `click` | `x`, `y`, `button?`, `double_click?` | Primary-screen physical coordinates only |
 | | `move_to` | `x`, `y` | Move cursor without clicking |
 | | `click_by_uid` | `uid`, `snapshot` | Click a snapshot-identified control |
@@ -50,13 +50,15 @@ If reading the screenshot file yields no visual content, fall back to structured
 | **Task** | `start_task` | `goal` | Begin auditable task, returns `task_id` |
 | | `finish_task` | `task_id`, `summary?`, `cancel?` | End task |
 | | `review_task` | `trace_id`, `detail?` | Trace summary (+ step detail if `detail=true`) |
-| | `review_task_session` | `task_id`, `detail?` | Aggregate task review |
+| | `review_task_session` | `task_id`, `detail?` | Aggregate task review; returns `timing_breakdown` with tool_duration_ms, wall_clock_duration_ms, and agent_gap_ratio |
 | | `save_review` | `report_markdown`, `outcome?`, `task_id?` | Persist a standardized retrospective report to `~/.computer-use/reviews/` |
 | **Wait** | `wait_for_window` | `name` | Wait for window to appear/disappear |
 | | `wait_for_control` | `name` | Wait for control to exist/enable/vanish |
 | | `sleep` | `duration` (max 60s) | Fixed pause (prefer event-driven waits) |
 | **Launch** | `launch_app` | `name` | Start app by Start Menu / Desktop shortcut |
 | | `activate_window` | `name` | Bring an existing/backgrounded/minimized window to the foreground |
+| **Security** | `add_command_whitelist` | `command`, `level=once\|session\|permanent` | Grant runtime permission for a command blocked by whitelist |
+| | `add_window_exception` | `class_name?`, `process_name?`, `level=once\|session` | Grant runtime exception for a blocked sensitive window/process |
 
 > All executable tools accept optional `task_id`. After `start_task`, omitting `task_id` while an explicit task is active returns `missing_task_id`.
 
@@ -95,6 +97,8 @@ When a crop returns unreadable content (uniform color, looks like desktop backgr
 The annotated image is non-destructive — the original source PNG is never overwritten, so the agent can repeatedly crop from the same source and inspect each annotation. Set `annotate: false` to skip the sidecar write when not needed (e.g. when cropping in tight performance-sensitive loops).
 
 `annotated_source_path` is the canonical one-image verification artifact. When the source is an MCP screenshot, it contains both visual layers: the red cursor crosshair from the screenshot and the red crop-region marker from `crop_screenshot`. Use it to answer both questions at once: "where was the mouse?" and "what region did I crop?"
+
+The `annotation_layers` field in the `crop_screenshot` response provides structured coordinates for programmatic verification: `cursor` (`screen_x`, `screen_y`, `image_x`, `image_y`, `present`, `style`) and `crop_region` (`x`, `y`, `width`, `height`, `style`). Use these to verify alignment without re-reading the image.
 
 ### Mechanical batch (after target confirmed)
 
@@ -223,6 +227,10 @@ Each full-screen screenshot (whether read via the file tool or returned with `in
 - If multiple controls match, inspect candidates or ask for a disambiguating observation rather than guessing.
 - If a step fails inside `batch` or `run_task_plan`, use the returned `failed_index`, `error_kind`, `trace_path`, and `artifacts` as the source of truth.
 - Use `retry_step` only when the current UI state still matches the failed step's assumptions.
+- **`command_not_whitelisted`**: do not repeat the blocked command. Ask the user for permission, then call `add_command_whitelist(command, level=...)` and retry. Level: `once` (one successful use), `session` (until server restart), or `permanent` (write to config.yaml). Prefer `once` or `session`; use `permanent` only when the user explicitly requests it.
+- **`sensitive_window_blocked`**: do not probe the blocked window. Ask the user whether to grant an exception via `add_window_exception(class_name=..., process_name=..., level=once|session)`, then retry.
+- **Hardcoded blocks** (keepass, certmgr, 1password, lastpass, mmc) are **never** bypassable — `add_window_exception` cannot override them. Inform the user and stop.
+- **`task_closed` / `missing_task_id`**: the active task session was closed or requires an explicit `task_id`. Call `start_task(goal=...)` to begin a new session, then pass the returned `task_id` to subsequent calls.
 
 ## Retrospective Reports
 
