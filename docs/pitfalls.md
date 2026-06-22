@@ -63,14 +63,14 @@
 
 ## 自定义绘制标题栏与不可见控件
 
-**现象**：Agent 根据截图中的文字（如 HiBit 的“工具”菜单）点击后没有任何反应，菜单不打开；`find_control` 也找不到同名控件。
+**现象**：Agent 根据截图中的文字（如 HiBit 的"工具"菜单）点击后没有任何反应，菜单不打开；`find_control` 也找不到同名控件。
 
 **原因**：部分应用（如 Delphi/VCL 程序）使用自定义绘制标题栏，文字只是画上去的，真正的可点击控件是另一个 UIA 元素（如 `TrkGlassButton`），两者位置可能不一致。纯坐标点击落在文字标签上不会触发菜单。
 
 **解决**：
 - 优先用 `uiautomation` / `inspect` 枚举实际控件，找到可点击元素的真实边界框。
 - 对自定义菜单，由上层多模态模型直接分析截图，定位文字中心坐标后通过 `click(x, y)` 点击；MCP server 不提供 OCR 工具或视觉回退。
-- 在 `docs/plans/` 或调试脚本中记录目标应用的“文字标签 → 实际控件”映射。
+- 在 `docs/plans/` 或调试脚本中记录目标应用的"文字标签 -> 实际控件"映射。
 
 ## UIA 覆盖不足时的回退策略
 
@@ -81,7 +81,7 @@
 **解决**：
 - 复合工具只依赖 UIA；若找不到目标，返回结构化 `ui_not_found`，不替模型做视觉判断。
 - 上层多模态模型可直接读取 `screenshot` 返回的截图，自行估算坐标并调用 `click(x, y)` 等原子工具。
-- 对高频自定义绘制应用，可在 `docs/plans/` 中记录“视觉坐标 → 实际动作”映射表。
+- 对高频自定义绘制应用，可在 `docs/plans/` 中记录"视觉坐标 -> 实际动作"映射表。
 
 ## Agent 未读取截图文件就放弃视觉任务
 
@@ -108,7 +108,7 @@
 
 ## 空目录不是产物证据
 
-**现象**：执行侧把 `~/.computer-use/traces/.../snapshots/` 或全局 `snapshots/` 目录描述为“本次任务含快照”，但实际 trace 没有对应文件。
+**现象**：执行侧把 `~/.computer-use/traces/.../snapshots/` 或全局 `snapshots/` 目录描述为"本次任务含快照"，但实际 trace 没有对应文件。
 
 **原因**：目录存在不代表本次调用产生了截图或 UI-tree JSON；历史回退目录还可能包含其他无 trace 上下文的 snapshot 截图。
 
@@ -120,7 +120,7 @@
 
 ## trace 根目录不是业务任务日志
 
-**现象**：执行侧向用户汇报“本次任务日志在 `~/.computer-use/traces/`”，或把时间相邻的多个 trace 当作同一任务证据。
+**现象**：执行侧向用户汇报"本次任务日志在 `~/.computer-use/traces/`"，或把时间相邻的多个 trace 当作同一任务证据。
 
 **原因**：trace 根目录是全局存储区，一天内可能包含多个业务任务、standalone 调用和历史兼容 trace。时间相邻不能证明同属一个任务。
 
@@ -142,14 +142,15 @@
 
 ## 首次使用 launch_app 被拦截
 
-**现象**：调用 `launch_app("Notepad")` 返回 `No commands are allowed` 或 `... is not in allowed_commands whitelist`，应用没有启动。
+**现象**：调用 `launch_app("Notepad")` 返回 `command_not_whitelisted` 或 `no_commands_allowed`，应用没有启动。
 
-**原因**：`launch_app` 依赖 `safety.allowed_commands` 白名单；默认配置中该列表为空，未命中任何条目时所有启动请求都会被拒绝。
+**原因**：`launch_app` 依赖三层检查：`safety.allowed_commands` 配置白名单、内置默认命令（`use_builtin_defaults`）、运行时权限（`add_command_whitelist`）。
 
 **解决**：
-- 复制 `config.example.yaml` 到 `~/.computer-use/config.yaml`，按本机实际路径填写 `allowed_commands`。
-- 白名单支持绝对路径或程序名；敏感进程（如 KeePass、certmgr）即使列入白名单仍会被拦截。
-- 错误消息已区分“白名单为空”和“未命中白名单”，并指向 `config.example.yaml`。
+- **内置默认**：`use_builtin_defaults: true`（默认）时，常用系统命令（notepad、calc、explorer、cmd、powershell 等）自动放行。
+- **运行时授予**：被拦截时 Agent 会询问用户。调用 `add_command_whitelist(command, level)` 即可放行：`once` 一次性、`session` 本会话、`permanent` 写入 config.yaml。
+- **敏感窗口例外**：`#32770` 等敏感窗口类被拦截时，同理调用 `add_window_exception(class_name="#32770", level="once|session")`。
+- **不可绕过**：硬编码敏感进程（keepass、certmgr、1password、lastpass、mmc）始终拦截，无法通过任何机制绕过。
 
 ## 混合 DPI 被 fail-fast
 
@@ -158,7 +159,7 @@
 **原因**：`CoordinateSystem` 在初始化时检测各显示器缩放比例，发现不一致时直接拒绝启动，避免截图坐标与输入坐标错位。
 
 **解决**：
-- 统一所有显示器的缩放比例（Windows 设置 → 系统 → 显示 → 缩放与布局）。
+- 统一所有显示器的缩放比例（Windows 设置 -> 系统 -> 显示 -> 缩放与布局）。
 - 如果必须使用不同缩放，暂时只连接主显示器，或在统一缩放的虚拟机/RDP 会话中运行服务。
 - 混合 DPI 多显示器支持已明确排除在当前计划之外，将作为后续独立计划推进。
 
