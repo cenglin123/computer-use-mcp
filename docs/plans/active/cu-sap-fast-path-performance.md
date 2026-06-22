@@ -37,10 +37,10 @@ Once the SAP desktop geometry has been validated, the fast path should be:
 
 1. Optional one initial screenshot.
 2. One `batch` containing:
-   - double-click SAP Logon desktop icon at `(1786, 748)`
+   - double-click SAP Logon desktop icon at validated coordinates
    - wait for `SAP Logon 750`
-   - click title bar around `(800, 165)`
-   - press `Return` to open selected `中铝PRD`
+   - click title bar (non-sensitive area) to focus window
+   - press `Return` to open selected SAP connection
    - wait for SAP GUI login window title `SAP`
    - type username
    - press `Tab`
@@ -200,7 +200,7 @@ Create `docs/recipes/sap-logon-fast-path.md`:
 ## Preconditions
 
 - `Primary monitor is 1920x1080` (adjust for your resolution).
-- SAP Logon desktop shortcut is visible at approximately `(1786, 748)` (adjust to your icon position).
+- SAP Logon desktop shortcut is visible at approximately `(<icon_x>, <icon_y>)` (adjust to your icon position).
 - `<sap_connection_name>` is the selected connection in SAP Logon 750 (e.g. `PRD`, `QAS`).
 - User explicitly requested credential entry.
 - The agent must stop after entering credentials unless the user explicitly requests login submission.
@@ -212,9 +212,9 @@ Use one `batch` after a single orientation screenshot (replace coordinates and c
 ```json
 {
   "actions": [
-    {"tool": "click", "args": {"x": 1786, "y": 748, "double_click": true}},
+    {"tool": "click", "args": {"x": <icon_x>, "y": <icon_y>, "double_click": true}},
     {"tool": "wait_for_window", "args": {"name": "SAP Logon 750", "exists": true, "timeout": 8}},
-    {"tool": "click", "args": {"x": 800, "y": 165}},
+    {"tool": "click", "args": {"x": <title_bar_x>, "y": <title_bar_y>}},
     {"tool": "press_key", "args": {"key": "Return"}},
     {"tool": "wait_for_window", "args": {"name": "SAP", "exists": true, "timeout": 12}},
     {"tool": "type", "args": {"text": "<username>"}},

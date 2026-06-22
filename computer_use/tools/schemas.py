@@ -653,7 +653,7 @@ TOOLS: list[Tool] = [
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "The executable path or name to whitelist (e.g., 'D:/Program Files/SAP/saplogon.exe' or 'notepad.exe').",
+                    "description": "The executable path or name to whitelist (e.g., 'C:/path/to/app.exe' or 'notepad.exe').",
                 },
                 "level": {
                     "type": "string",

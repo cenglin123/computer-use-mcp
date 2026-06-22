@@ -29,6 +29,9 @@ wheels/
 .pytest_cache/
 .coverage
 
+# User-specific configuration (created from config.example.yaml)
+config.yaml
+
 # Environment-specific recipes (not tracked — contains private coordinates/systems)
 docs/recipes/
 htmlcov/

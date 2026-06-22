@@ -765,7 +765,7 @@ In `schemas.py`, insert two new Tool entries into the `TOOLS` list:
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "The executable path or name to whitelist (e.g., 'D:/Program Files/SAP/saplogon.exe' or 'notepad.exe').",
+                    "description": "The executable path or name to whitelist (e.g., 'C:/path/to/app.exe' or 'notepad.exe').",
                 },
                 "level": {
                     "type": "string",
@@ -964,7 +964,7 @@ safety:
     # write, taskmgr, control, charmap, snippingtool) are active when
     # use_builtin_defaults is true. Add custom application paths below:
     # - C:/Program Files (x86)/HiBit Uninstaller/HiBitUninstaller.exe
-    # - D:/Program Files (x86)/SAP/FrontEnd/SAPgui/saplogon.exe
+    # - C:/path/to/sap/saplogon.exe
 ```
 
 - [ ] **Step 3: Run tests**
