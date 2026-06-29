@@ -45,3 +45,8 @@
 - 系统设计：[docs/overview.md](/docs/overview.md)
 - 工具约定：[docs/api.md](/docs/api.md)
 - 环境陷阱：[docs/pitfalls.md](/docs/pitfalls.md)
+
+## 参考文献
+
+- **SkillOS: Learning Skill Curation for Self-Evolving Agents** — Siru Ouyang, Jun Yan, Yanfei Chen, et al. arXiv:2605.06614v1, May 2026. https://arxiv.org/abs/2605.06614
+    - RL 训练的 8B curator 模型管理 Markdown 技能仓库（insert/update/delete），通过任务分组 + 复合奖励学习长期策展策略。本项目的技能策展闭环（plan active/20260630-skill-curation-loop）以此为主要参考。
